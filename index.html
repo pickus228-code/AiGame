@@ -1,0 +1,1334 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Три в ряд</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #1a1a2e;
+            font-family: Arial, sans-serif;
+            user-select: none;
+        }
+        
+        canvas {
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="700"></canvas>
+    <script>
+        // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const WIDTH = 600;
+        const HEIGHT = 700;
+        const GRID_SIZE = 8;
+        const CELL_SIZE = WIDTH / GRID_SIZE;
+        const MARGIN = 8;
+        const TOP_OFFSET = 100;
+        
+        // Цвета фишек
+        const COLORS = {
+            0: [255, 80, 80],
+            1: [80, 255, 80],
+            2: [80, 80, 255],
+            3: [255, 255, 80],
+            4: [255, 80, 255],
+            5: [80, 255, 255]
+        };
+        
+        // ==================== КЛАСС ИГРЫ ====================
+        class MatchThreeGame {
+            constructor() {
+                this.running = true;
+                this.gameState = "MENU";
+                this.gameMode = "CLASSIC";
+                this.currentLevel = 1;
+                this.nextLevel = 1;
+                this.levelTarget = 100;
+                this.highScore = 0;
+                this.bestScores = { CLASSIC: 0, LEVELS: {}, NEXT_LEVEL: 1 };
+                this.bgObjects = [];
+                this.bgAnimationTimer = 0;
+                
+                // Анимационные данные
+                this.fallingCells = [];
+                this.removingCells = [];
+                this.swapAnimation = [];
+                this.moveAnimation = [];
+                
+                // Состояния перетаскивания
+                this.isDragging = false;
+                this.dragStartCell = null;
+                this.dragCurrentCell = null;
+                this.dragTrail = [];
+                
+                // Шрифты
+                this.fonts = {
+                    small: '16px Arial',
+                    normal: '20px Arial',
+                    medium: '28px Arial',
+                    big: '36px Arial',
+                    title: '52px Arial',
+                    huge: '64px Arial'
+                };
+                
+                this.loadScores();
+                this.createBackgroundObjects();
+                this.resetGame();
+                
+                // Настройка обработчиков событий
+                this.setupEventListeners();
+                
+                // Запуск игрового цикла
+                this.gameLoop();
+            }
+            
+            createBackgroundObjects() {
+                this.bgObjects = [];
+                const colorValues = Object.values(COLORS);
+                for (let i = 0; i < 15; i++) {
+                    const color = colorValues[Math.floor(Math.random() * colorValues.length)];
+                    this.bgObjects.push({
+                        x: Math.random() * WIDTH,
+                        y: Math.random() * HEIGHT,
+                        size: 20 + Math.random() * 40,
+                        color: color,
+                        speedX: (Math.random() - 0.5) * 0.6,
+                        speedY: (Math.random() - 0.5) * 0.6,
+                        alpha: 20 + Math.random() * 40
+                    });
+                }
+            }
+            
+            loadScores() {
+                try {
+                    const data = JSON.parse(localStorage.getItem('matchThreeScores'));
+                    if (data) {
+                        this.bestScores = data;
+                        this.highScore = data.CLASSIC || 0;
+                        this.nextLevel = data.NEXT_LEVEL || 1;
+                        this.currentLevel = this.nextLevel;
+                        const levelKey = String(this.currentLevel);
+                        if (data.LEVELS && data.LEVELS[levelKey]) {
+                            this.levelTarget = data.LEVELS[levelKey];
+                        } else {
+                            this.levelTarget = 50 + (this.currentLevel - 1) * 50;
+                        }
+                    }
+                } catch(e) {
+                    this.bestScores = { CLASSIC: 0, LEVELS: {}, NEXT_LEVEL: 1 };
+                    this.highScore = 0;
+                    this.currentLevel = 1;
+                    this.nextLevel = 1;
+                    this.levelTarget = 100;
+                }
+            }
+            
+            saveScores() {
+                try {
+                    this.bestScores.NEXT_LEVEL = this.nextLevel;
+                    localStorage.setItem('matchThreeScores', JSON.stringify(this.bestScores));
+                } catch(e) {}
+            }
+            
+            saveCurrentScore() {
+                if (this.gameMode === "CLASSIC") {
+                    if (this.score > this.highScore) {
+                        this.highScore = this.score;
+                        this.bestScores.CLASSIC = this.highScore;
+                        this.saveScores();
+                    }
+                } else {
+                    const levelKey = String(this.currentLevel);
+                    if (!this.bestScores.LEVELS[levelKey] || this.score > this.bestScores.LEVELS[levelKey]) {
+                        this.bestScores.LEVELS[levelKey] = this.score;
+                        this.bestScores.NEXT_LEVEL = this.nextLevel;
+                        this.saveScores();
+                    }
+                }
+            }
+            
+            resetGame() {
+                this.grid = [];
+                for (let r = 0; r < GRID_SIZE; r++) {
+                    this.grid[r] = [];
+                    for (let c = 0; c < GRID_SIZE; c++) {
+                        this.grid[r][c] = 0;
+                    }
+                }
+                this.score = 0;
+                this.selected = null;
+                this.isAnimating = false;
+                this.moves = 0;
+                this.gameOver = false;
+                this.levelCompleteShown = false;
+                
+                this.fallingCells = [];
+                this.removingCells = [];
+                this.swapAnimation = [];
+                this.moveAnimation = [];
+                
+                this.isDragging = false;
+                this.dragStartCell = null;
+                this.dragCurrentCell = null;
+                this.dragTrail = [];
+                
+                this.fillGrid();
+                
+                if (!this.hasValidMoves()) {
+                    this.shuffleGrid();
+                }
+            }
+            
+            fillGrid() {
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        const available = Object.keys(COLORS).map(Number);
+                        if (col >= 2 && this.grid[row][col-1] === this.grid[row][col-2]) {
+                            const idx = available.indexOf(this.grid[row][col-1]);
+                            if (idx !== -1) available.splice(idx, 1);
+                        }
+                        if (row >= 2 && this.grid[row-1][col] === this.grid[row-2][col]) {
+                            const idx = available.indexOf(this.grid[row-1][col]);
+                            if (idx !== -1) available.splice(idx, 1);
+                        }
+                        this.grid[row][col] = available[Math.floor(Math.random() * available.length)];
+                    }
+                }
+                this.processMatches();
+            }
+            
+            shuffleGrid() {
+                const colors = [];
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        if (this.grid[row][col] !== -1) {
+                            colors.push(this.grid[row][col]);
+                        }
+                    }
+                }
+                
+                for (let i = colors.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [colors[i], colors[j]] = [colors[j], colors[i]];
+                }
+                
+                let idx = 0;
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        if (this.grid[row][col] !== -1) {
+                            this.grid[row][col] = colors[idx++];
+                        }
+                    }
+                }
+                
+                this.processMatches();
+                
+                if (!this.hasValidMoves()) {
+                    this.shuffleGrid();
+                }
+            }
+            
+            hasValidMoves() {
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        if (this.grid[row][col] === -1) continue;
+                        
+                        const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                        for (const [dr, dc] of directions) {
+                            const nr = row + dr;
+                            const nc = col + dc;
+                            if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE && this.grid[nr][nc] !== -1) {
+                                // Пробуем обменять
+                                [this.grid[row][col], this.grid[nr][nc]] = [this.grid[nr][nc], this.grid[row][col]];
+                                const hasMatch = this.findMatches().length > 0;
+                                [this.grid[row][col], this.grid[nr][nc]] = [this.grid[nr][nc], this.grid[row][col]];
+                                if (hasMatch) return true;
+                            }
+                        }
+                    }
+                }
+                return false;
+            }
+            
+            getCellRect(row, col) {
+                const x = col * CELL_SIZE + MARGIN;
+                const y = row * CELL_SIZE + MARGIN + TOP_OFFSET;
+                const size = CELL_SIZE - 2 * MARGIN;
+                return { x, y, width: size, height: size };
+            }
+            
+            getCellCenter(row, col) {
+                const rect = this.getCellRect(row, col);
+                return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+            }
+            
+            findMatches() {
+                const matches = new Set();
+                
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE - 2; col++) {
+                        if (this.grid[row][col] !== -1 &&
+                            this.grid[row][col] === this.grid[row][col+1] &&
+                            this.grid[row][col] === this.grid[row][col+2]) {
+                            matches.add(`${row},${col}`);
+                            matches.add(`${row},${col+1}`);
+                            matches.add(`${row},${col+2}`);
+                        }
+                    }
+                }
+                
+                for (let row = 0; row < GRID_SIZE - 2; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        if (this.grid[row][col] !== -1 &&
+                            this.grid[row][col] === this.grid[row+1][col] &&
+                            this.grid[row][col] === this.grid[row+2][col]) {
+                            matches.add(`${row},${col}`);
+                            matches.add(`${row+1},${col}`);
+                            matches.add(`${row+2},${col}`);
+                        }
+                    }
+                }
+                
+                return Array.from(matches).map(s => {
+                    const [r, c] = s.split(',').map(Number);
+                    return [r, c];
+                });
+            }
+            
+            processMatches() {
+                const matches = this.findMatches();
+                if (matches.length === 0) return false;
+                
+                this.score += matches.length * 10;
+                
+                for (const [row, col] of matches) {
+                    this.removingCells.push({
+                        row, col,
+                        size: CELL_SIZE - 2 * MARGIN,
+                        speed: 5
+                    });
+                    this.grid[row][col] = -1;
+                }
+                
+                this.isAnimating = true;
+                return true;
+            }
+            
+            dropDown() {
+                let dropped = false;
+                
+                for (let col = 0; col < GRID_SIZE; col++) {
+                    let emptyCount = 0;
+                    for (let row = GRID_SIZE - 1; row >= 0; row--) {
+                        if (this.grid[row][col] === -1) {
+                            emptyCount++;
+                        } else if (emptyCount > 0) {
+                            this.grid[row + emptyCount][col] = this.grid[row][col];
+                            this.grid[row][col] = -1;
+                            
+                            this.fallingCells.push({
+                                row: row + emptyCount,
+                                col: col,
+                                offset: -emptyCount * CELL_SIZE,
+                                speed: 12
+                            });
+                            dropped = true;
+                        }
+                    }
+                    
+                    for (let row = 0; row < emptyCount; row++) {
+                        if (this.grid[row][col] === -1) {
+                            this.grid[row][col] = Math.floor(Math.random() * Object.keys(COLORS).length);
+                            this.fallingCells.push({
+                                row: row,
+                                col: col,
+                                offset: -(emptyCount - row) * CELL_SIZE - CELL_SIZE,
+                                speed: 12
+                            });
+                            dropped = true;
+                        }
+                    }
+                }
+                
+                if (this.fallingCells.length > 0) {
+                    this.isAnimating = true;
+                    return true;
+                }
+                return dropped;
+            }
+            
+            updateAnimation() {
+                // Анимация удаления
+                if (this.removingCells.length > 0) {
+                    for (const rem of this.removingCells) {
+                        rem.size -= rem.speed;
+                    }
+                    this.removingCells = this.removingCells.filter(rem => rem.size > 0);
+                    
+                    if (this.removingCells.length === 0) {
+                        this.dropDown();
+                    }
+                    return;
+                }
+                
+                // Анимация падения
+                if (this.fallingCells.length > 0) {
+                    for (const fall of this.fallingCells) {
+                        fall.offset += fall.speed;
+                        if (fall.offset >= 0) fall.offset = 0;
+                    }
+                    this.fallingCells = this.fallingCells.filter(fall => fall.offset < 0);
+                    
+                    if (this.fallingCells.length === 0) {
+                        this.isAnimating = false;
+                        if (this.processMatches()) {
+                            this.isAnimating = true;
+                        } else {
+                            this.selected = null;
+                            if (!this.hasValidMoves()) {
+                                this.handleNoMoves();
+                            }
+                        }
+                    }
+                    return;
+                }
+                
+                // Анимация обмена
+                if (this.swapAnimation.length > 0) {
+                    let allDone = true;
+                    for (const swap of this.swapAnimation) {
+                        if (swap.progress < 1) {
+                            swap.progress += 0.1;
+                            const t = swap.progress;
+                            swap.dx = swap.startDx * (1 - t) + swap.endDx * t;
+                            swap.dy = swap.startDy * (1 - t) + swap.endDy * t;
+                            allDone = false;
+                        } else {
+                            swap.dx = swap.endDx;
+                            swap.dy = swap.endDy;
+                        }
+                    }
+                    
+                    if (allDone) {
+                        this.swapAnimation = [];
+                        if (this.processMatches()) {
+                            this.isAnimating = true;
+                        } else {
+                            this.isAnimating = false;
+                            this.selected = null;
+                            if (!this.hasValidMoves()) {
+                                this.handleNoMoves();
+                            }
+                        }
+                    }
+                    return;
+                }
+                
+                // Проверка совпадений
+                if (!this.isAnimating && this.removingCells.length === 0 && 
+                    this.fallingCells.length === 0 && this.swapAnimation.length === 0) {
+                    if (this.processMatches()) {
+                        this.isAnimating = true;
+                    }
+                }
+            }
+            
+            handleNoMoves() {
+                if (this.gameMode === "CLASSIC") {
+                    this.gameOver = true;
+                    this.saveCurrentScore();
+                } else {
+                    this.shuffleGrid();
+                }
+            }
+            
+            animateSwap(pos1, pos2) {
+                const [row1, col1] = pos1;
+                const [row2, col2] = pos2;
+                
+                const center1 = this.getCellCenter(row1, col1);
+                const center2 = this.getCellCenter(row2, col2);
+                
+                this.swapAnimation.push({
+                    row: row1, col: col1,
+                    dx: 0, dy: 0,
+                    startDx: 0, startDy: 0,
+                    endDx: center2.x - center1.x,
+                    endDy: center2.y - center1.y,
+                    progress: 0
+                });
+                
+                this.swapAnimation.push({
+                    row: row2, col: col2,
+                    dx: 0, dy: 0,
+                    startDx: 0, startDy: 0,
+                    endDx: center1.x - center2.x,
+                    endDy: center1.y - center2.y,
+                    progress: 0
+                });
+                
+                this.isAnimating = true;
+            }
+            
+            swapCells(pos1, pos2) {
+                if (!pos1 || !pos2) return false;
+                const [row1, col1] = pos1;
+                const [row2, col2] = pos2;
+                
+                if (!(row1 >= 0 && row1 < GRID_SIZE && col1 >= 0 && col1 < GRID_SIZE &&
+                      row2 >= 0 && row2 < GRID_SIZE && col2 >= 0 && col2 < GRID_SIZE)) {
+                    return false;
+                }
+                
+                if (!this.isAdjacent(pos1, pos2)) return false;
+                if (this.grid[row1][col1] === -1 || this.grid[row2][col2] === -1) return false;
+                
+                [this.grid[row1][col1], this.grid[row2][col2]] = [this.grid[row2][col2], this.grid[row1][col1]];
+                return true;
+            }
+            
+            trySwap(pos1, pos2) {
+                if (this.isAnimating) return false;
+                if (!pos1 || !pos2) return false;
+                if (!this.isAdjacent(pos1, pos2)) return false;
+                
+                const gridCopy = this.grid.map(row => [...row]);
+                
+                if (this.swapCells(pos1, pos2)) {
+                    if (this.findMatches().length > 0) {
+                        this.animateSwap(pos1, pos2);
+                        return true;
+                    } else {
+                        this.grid = gridCopy;
+                        return false;
+                    }
+                }
+                return false;
+            }
+            
+            isAdjacent(pos1, pos2) {
+                if (!pos1 || !pos2) return false;
+                const [row1, col1] = pos1;
+                const [row2, col2] = pos2;
+                return Math.abs(row1 - row2) + Math.abs(col1 - col2) === 1;
+            }
+            
+            getGridPos(mx, my) {
+                if (my < TOP_OFFSET) return null;
+                const col = Math.floor(mx / CELL_SIZE);
+                const row = Math.floor((my - TOP_OFFSET) / CELL_SIZE);
+                if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE) {
+                    return [row, col];
+                }
+                return null;
+            }
+            
+            // ==================== ОТРИСОВКА ====================
+            
+            drawMenu() {
+                ctx.fillStyle = '#1e1e32';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                // Фоновая анимация
+                this.bgAnimationTimer += 0.02;
+                for (const obj of this.bgObjects) {
+                    obj.x += obj.speedX * 0.5;
+                    obj.y += obj.speedY * 0.5;
+                    
+                    if (obj.x < 0 || obj.x > WIDTH) obj.speedX *= -1;
+                    if (obj.y < 0 || obj.y > HEIGHT) obj.speedY *= -1;
+                    
+                    ctx.globalAlpha = obj.alpha / 255;
+                    ctx.fillStyle = `rgb(${obj.color[0]}, ${obj.color[1]}, ${obj.color[2]})`;
+                    const s = obj.size;
+                    ctx.beginPath();
+                    ctx.roundRect(obj.x, obj.y, s, s, 5);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+                
+                // Заголовок
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Тень
+                ctx.font = this.fonts.title;
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillText('ТРИ В РЯД', WIDTH/2 + 4, 154);
+                
+                // Основной текст
+                ctx.fillStyle = '#ffd700';
+                ctx.fillText('ТРИ В РЯД', WIDTH/2, 150);
+                
+                // Информация
+                if (this.gameMode === "LEVELS") {
+                    ctx.font = this.fonts.normal;
+                    ctx.fillStyle = '#cccccc';
+                    ctx.fillText(`Следующий уровень: ${this.nextLevel}`, WIDTH/2, 210);
+                    
+                    ctx.font = this.fonts.small;
+                    ctx.fillStyle = '#999999';
+                    const completed = Object.keys(this.bestScores.LEVELS || {}).length;
+                    ctx.fillText(`Пройдено уровней: ${completed}`, WIDTH/2, 235);
+                } else {
+                    ctx.font = this.fonts.normal;
+                    ctx.fillStyle = '#cccccc';
+                    ctx.fillText(`Рекорд: ${this.highScore}`, WIDTH/2, 210);
+                }
+                
+                // Кнопки режимов
+                const buttons = [
+                    { text: 'КЛАССИЧЕСКИЙ', x: WIDTH/2 - 150, y: 280, w: 300, h: 50, active: this.gameMode === "CLASSIC" },
+                    { text: 'УРОВНИ', x: WIDTH/2 - 150, y: 350, w: 300, h: 50, active: this.gameMode === "LEVELS" }
+                ];
+                
+                for (const btn of buttons) {
+                    ctx.fillStyle = btn.active ? '#6464c8' : '#3c3c78';
+                    ctx.beginPath();
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                    ctx.stroke();
+                    
+                    if (btn.active) {
+                        ctx.strokeStyle = '#ffd700';
+                        ctx.lineWidth = 4;
+                        ctx.beginPath();
+                        ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.font = this.fonts.normal;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
+                }
+                
+                // Кнопка "Играть"
+                const playBtn = { x: WIDTH/2 - 100, y: 430, w: 200, h: 60 };
+                const pulse = Math.sin(Date.now() / 500) * 3;
+                
+                for (let i = 0; i < 60; i++) {
+                    const colorVal = 100 + Math.floor(100 * (i / 60));
+                    ctx.fillStyle = `rgb(${colorVal}, ${200 + Math.floor(55 * (i / 60))}, ${100 + Math.floor(100 * (i / 60))})`;
+                    ctx.fillRect(playBtn.x, playBtn.y + i, playBtn.w, 1);
+                }
+                
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.roundRect(playBtn.x, playBtn.y, playBtn.w, playBtn.h, 10);
+                ctx.stroke();
+                
+                ctx.font = this.fonts.normal;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText('ИГРАТЬ', playBtn.x + playBtn.w/2, playBtn.y + playBtn.h/2);
+                
+                // Информация
+                ctx.font = this.fonts.small;
+                ctx.fillStyle = '#b4b4b4';
+                if (this.gameMode === "CLASSIC") {
+                    ctx.fillText('Классический режим - набирайте очки!', WIDTH/2, 520);
+                } else {
+                    ctx.fillText(`Уровень ${this.nextLevel} - цель: ${this.levelTarget} очков`, WIDTH/2, 520);
+                }
+                
+                ctx.fillStyle = '#969696';
+                ctx.fillText('Нажмите SPACE для быстрого старта | ESC для выхода', WIDTH/2, HEIGHT - 30);
+                
+                // Иконки цветов
+                const iconSize = 30;
+                const iconMargin = 10;
+                const totalWidth = Object.keys(COLORS).length * (iconSize + iconMargin) - iconMargin;
+                let startX = (WIDTH - totalWidth) / 2;
+                for (const color of Object.values(COLORS)) {
+                    ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                    ctx.beginPath();
+                    ctx.roundRect(startX, 560, iconSize, iconSize, 5);
+                    ctx.fill();
+                    ctx.strokeStyle = '#c8c8c8';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(startX, 560, iconSize, iconSize, 5);
+                    ctx.stroke();
+                    startX += iconSize + iconMargin;
+                }
+            }
+            
+            drawGameOver() {
+                // Затемнение
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                // Заголовок
+                ctx.font = this.fonts.huge;
+                if (this.gameMode === "CLASSIC") {
+                    ctx.fillStyle = '#ff6464';
+                    ctx.fillText('ИГРА ОКОНЧЕНА', WIDTH/2, HEIGHT/2 - 150);
+                } else {
+                    if (this.score >= this.levelTarget) {
+                        ctx.fillStyle = '#64ff64';
+                        ctx.fillText('УРОВЕНЬ ПРОЙДЕН!', WIDTH/2, HEIGHT/2 - 150);
+                    } else {
+                        ctx.fillStyle = '#ff6464';
+                        ctx.fillText('ИГРА ОКОНЧЕНА', WIDTH/2, HEIGHT/2 - 150);
+                    }
+                }
+                
+                // Счет
+                ctx.font = this.fonts.medium;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(`Счет: ${this.score}`, WIDTH/2, HEIGHT/2 - 80);
+                
+                // Информация
+                ctx.font = this.fonts.normal;
+                if (this.gameMode === "CLASSIC") {
+                    ctx.fillStyle = '#c8c8c8';
+                    ctx.fillText(`Рекорд: ${this.highScore}`, WIDTH/2, HEIGHT/2 - 30);
+                } else {
+                    if (this.score >= this.levelTarget) {
+                        ctx.fillStyle = '#64ff64';
+                        ctx.fillText(`Уровень ${this.currentLevel} пройден!`, WIDTH/2, HEIGHT/2 - 30);
+                        ctx.font = this.fonts.small;
+                        ctx.fillStyle = '#c8c8c8';
+                        ctx.fillText(`Следующий уровень: ${this.currentLevel + 1}`, WIDTH/2, HEIGHT/2 + 10);
+                        
+                        const completed = Object.keys(this.bestScores.LEVELS || {}).length;
+                        const extra = this.bestScores.LEVELS[String(this.currentLevel)] ? 0 : 1;
+                        ctx.fillStyle = '#969696';
+                        ctx.fillText(`Пройдено уровней: ${completed + extra}`, WIDTH/2, HEIGHT/2 + 40);
+                    } else {
+                        ctx.fillStyle = '#c8c8c8';
+                        ctx.fillText(`Попробуйте снова уровень ${this.currentLevel}`, WIDTH/2, HEIGHT/2 - 30);
+                    }
+                }
+                
+                // Кнопки
+                const buttonYStart = HEIGHT/2 + 60;
+                const buttonSpacing = 65;
+                const buttons = [];
+                
+                if (this.gameMode === "CLASSIC" || this.score < this.levelTarget) {
+                    buttons.push({ text: 'ПОВТОРИТЬ', x: WIDTH/2 - 100, y: buttonYStart, w: 200, h: 50 });
+                } else {
+                    buttons.push({ text: 'СЛЕДУЮЩИЙ УРОВЕНЬ', x: WIDTH/2 - 120, y: buttonYStart, w: 240, h: 50 });
+                }
+                buttons.push({ text: 'МЕНЮ', x: WIDTH/2 - 100, y: buttonYStart + buttonSpacing, w: 200, h: 50 });
+                buttons.push({ text: 'РЕКОРДЫ', x: WIDTH/2 - 100, y: buttonYStart + buttonSpacing * 2, w: 200, h: 50 });
+                
+                for (const btn of buttons) {
+                    let color;
+                    if (btn.text === 'МЕНЮ') color = '#3c3c78';
+                    else if (btn.text === 'РЕКОРДЫ') color = '#3c784c';
+                    else if (btn.text === 'СЛЕДУЮЩИЙ УРОВЕНЬ') color = '#3cc84c';
+                    else color = '#6464c8';
+                    
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                    ctx.fill();
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                    ctx.stroke();
+                    
+                    ctx.font = this.fonts.normal;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
+                    
+                    // Сохраняем данные кнопки для обработки кликов
+                    btn._rect = { x: btn.x, y: btn.y, w: btn.w, h: btn.h };
+                }
+                
+                // Сохраняем кнопки для обработки кликов
+                this._gameOverButtons = buttons;
+            }
+            
+            drawGrid() {
+                ctx.fillStyle = '#323232';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                // Заголовок
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = this.fonts.normal;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText('Три в ряд', WIDTH/2, 10 + 18);
+                
+                ctx.textAlign = 'left';
+                ctx.font = this.fonts.small;
+                ctx.fillStyle = '#c8c8c8';
+                ctx.fillText(this.gameMode === "CLASSIC" ? 'Классический' : `Уровень ${this.currentLevel}`, 10, 40);
+                
+                ctx.font = this.fonts.normal;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(`Счет: ${this.score}`, 10, 60);
+                
+                if (this.gameMode === "LEVELS") {
+                    ctx.font = this.fonts.small;
+                    ctx.fillStyle = '#c8c8c8';
+                    ctx.fillText(`Цель: ${this.levelTarget}`, 10, 85);
+                    
+                    const progress = Math.min(this.score / this.levelTarget, 1);
+                    ctx.fillStyle = '#323232';
+                    ctx.beginPath();
+                    ctx.roundRect(10, 105, 200, 10, 5);
+                    ctx.fill();
+                    ctx.fillStyle = '#64c864';
+                    ctx.beginPath();
+                    ctx.roundRect(10, 105, 200 * progress, 10, 5);
+                    ctx.fill();
+                    
+                    const levelKey = String(this.currentLevel);
+                    if (this.bestScores.LEVELS && this.bestScores.LEVELS[levelKey]) {
+                        ctx.fillStyle = '#c8c8c8';
+                        ctx.fillText(`Рекорд уровня: ${this.bestScores.LEVELS[levelKey]}`, 220, 85);
+                    }
+                }
+                
+                // Кнопки
+                const menuBtn = { x: WIDTH - 230, y: 55, w: 100, h: 35 };
+                ctx.fillStyle = '#4646c8';
+                ctx.beginPath();
+                ctx.roundRect(menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8);
+                ctx.stroke();
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = this.fonts.small;
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText('Меню', menuBtn.x + menuBtn.w/2, menuBtn.y + menuBtn.h/2);
+                
+                const resetBtn = { x: WIDTH - 110, y: 55, w: 90, h: 35 };
+                ctx.fillStyle = '#c84646';
+                ctx.beginPath();
+                ctx.roundRect(resetBtn.x, resetBtn.y, resetBtn.w, resetBtn.h, 8);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(resetBtn.x, resetBtn.y, resetBtn.w, resetBtn.h, 8);
+                ctx.stroke();
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText('Сброс', resetBtn.x + resetBtn.w/2, resetBtn.y + resetBtn.h/2);
+                
+                // Сохраняем кнопки для обработки кликов
+                this._menuBtn = menuBtn;
+                this._resetBtn = resetBtn;
+                
+                // Рисуем сетку
+                for (let row = 0; row < GRID_SIZE; row++) {
+                    for (let col = 0; col < GRID_SIZE; col++) {
+                        if (this.grid[row][col] === -1) continue;
+                        
+                        const rect = this.getCellRect(row, col);
+                        const color = COLORS[this.grid[row][col]];
+                        
+                        let fallOffset = 0;
+                        for (const fall of this.fallingCells) {
+                            if (fall.row === row && fall.col === col) {
+                                fallOffset = fall.offset;
+                                break;
+                            }
+                        }
+                        
+                        let isRemoving = false;
+                        let remSize = 0;
+                        for (const rem of this.removingCells) {
+                            if (rem.row === row && rem.col === col) {
+                                isRemoving = true;
+                                remSize = rem.size;
+                                break;
+                            }
+                        }
+                        
+                        let swapOffset = { x: 0, y: 0 };
+                        for (const swap of this.swapAnimation) {
+                            if (swap.row === row && swap.col === col) {
+                                swapOffset = { x: swap.dx, y: swap.dy };
+                                break;
+                            }
+                        }
+                        
+                        let moveOffset = { x: 0, y: 0 };
+                        for (const move of this.moveAnimation) {
+                            if (move.row === row && move.col === col) {
+                                moveOffset = { x: move.dx, y: move.dy };
+                                break;
+                            }
+                        }
+                        
+                        if (isRemoving) {
+                            const cx = rect.x + rect.width / 2;
+                            const cy = rect.y + rect.height / 2;
+                            ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                            ctx.beginPath();
+                            ctx.roundRect(cx - remSize/2, cy - remSize/2, remSize, remSize, 5);
+                            ctx.fill();
+                        } else {
+                            const x = rect.x + swapOffset.x + moveOffset.x;
+                            const y = rect.y + fallOffset + swapOffset.y + moveOffset.y;
+                            
+                            ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                            ctx.beginPath();
+                            ctx.roundRect(x, y, rect.width, rect.height, 5);
+                            ctx.fill();
+                            
+                            ctx.strokeStyle = '#c8c8c8';
+                            ctx.lineWidth = 2;
+                            ctx.beginPath();
+                            ctx.roundRect(x, y, rect.width, rect.height, 5);
+                            ctx.stroke();
+                            
+                            if (this.selected && this.selected[0] === row && this.selected[1] === col && !this.isDragging) {
+                                ctx.strokeStyle = '#ffffff';
+                                ctx.lineWidth = 4;
+                                ctx.beginPath();
+                                ctx.roundRect(x, y, rect.width, rect.height, 5);
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+                
+                // Перетаскиваемый блок
+                if (this.isDragging && this.dragStartCell && !this.isAnimating) {
+                    const [row, col] = this.dragStartCell;
+                    if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE && this.grid[row][col] !== -1) {
+                        const rect = this.getCellRect(row, col);
+                        const color = COLORS[this.grid[row][col]];
+                        
+                        const scale = 1.15;
+                        const w = rect.width * scale;
+                        const h = rect.height * scale;
+                        
+                        const mouse = this._mousePos || { x: 0, y: 0 };
+                        
+                        // Тень
+                        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                        ctx.shadowBlur = 10;
+                        ctx.shadowOffsetX = 3;
+                        ctx.shadowOffsetY = 3;
+                        
+                        ctx.globalAlpha = 0.85;
+                        ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                        ctx.beginPath();
+                        ctx.roundRect(mouse.x - w/2, mouse.y - h/2, w, h, 5);
+                        ctx.fill();
+                        ctx.globalAlpha = 1;
+                        
+                        ctx.shadowColor = 'transparent';
+                        ctx.shadowBlur = 0;
+                        ctx.shadowOffsetX = 0;
+                        ctx.shadowOffsetY = 0;
+                        
+                        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.roundRect(mouse.x - w/2, mouse.y - h/2, w, h, 5);
+                        ctx.stroke();
+                        
+                        // Подсветка соседних клеток
+                        this.drawAdjacentHint(row, col);
+                    }
+                }
+                
+                // След перетаскивания
+                for (const pos of this.dragTrail) {
+                    if (pos !== this.dragStartCell) {
+                        const [row, col] = pos;
+                        const rect = this.getCellRect(row, col);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.beginPath();
+                        ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 5);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                }
+            }
+            
+            drawAdjacentHint(row, col) {
+                const directions = [[-1,0], [1,0], [0,-1], [0,1]];
+                for (const [dr, dc] of directions) {
+                    const nr = row + dr;
+                    const nc = col + dc;
+                    if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE && this.grid[nr][nc] !== -1) {
+                        const rect = this.getCellRect(nr, nc);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath();
+                        ctx.roundRect(rect.x, rect.y, rect.width, rect.height, 5);
+                        ctx.stroke();
+                    }
+                }
+            }
+            
+            // ==================== ОБРАБОТКА СОБЫТИЙ ====================
+            
+            setupEventListeners() {
+                canvas.addEventListener('mousedown', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const x = (e.clientX - rect.left) * scaleX;
+                    const y = (e.clientY - rect.top) * scaleY;
+                    
+                    if (this.gameState === "MENU") {
+                        this.handleMenuClick(x, y);
+                    } else if (this.gameState === "PLAYING") {
+                        this.handleMouseDown({ x, y });
+                    } else if (this.gameState === "GAME_OVER") {
+                        this.handleGameOverClick(x, y);
+                    }
+                });
+                
+                canvas.addEventListener('mousemove', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const x = (e.clientX - rect.left) * scaleX;
+                    const y = (e.clientY - rect.top) * scaleY;
+                    
+                    this._mousePos = { x, y };
+                    
+                    if (this.gameState === "PLAYING") {
+                        this.handleMouseMove({ x, y });
+                    }
+                });
+                
+                canvas.addEventListener('mouseup', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const scaleX = canvas.width / rect.width;
+                    const scaleY = canvas.height / rect.height;
+                    const x = (e.clientX - rect.left) * scaleX;
+                    const y = (e.clientY - rect.top) * scaleY;
+                    
+                    if (this.gameState === "PLAYING") {
+                        this.handleMouseUp({ x, y });
+                    }
+                });
+                
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'r' || e.key === 'R') {
+                        if (this.gameState === "PLAYING") this.resetGame();
+                    }
+                    if (e.key === 'Escape') {
+                        if (this.gameState === "PLAYING" || this.gameState === "GAME_OVER") {
+                            this.saveCurrentScore();
+                            this.saveScores();
+                            this.gameState = "MENU";
+                            this.selected = null;
+                            this.gameOver = false;
+                        } else if (this.gameState === "MENU") {
+                            this.running = false;
+                        }
+                    }
+                    if (e.key === ' ' || e.key === 'Space') {
+                        e.preventDefault();
+                        if (this.gameState === "MENU") {
+                            this.gameState = "PLAYING";
+                            if (this.gameMode === "LEVELS") {
+                                this.currentLevel = this.nextLevel;
+                                this.levelTarget = 50 + (this.currentLevel - 1) * 50;
+                            }
+                            this.resetGame();
+                        }
+                    }
+                });
+            }
+            
+            handleMenuClick(x, y) {
+                // Кнопки режимов
+                const classicBtn = { x: WIDTH/2 - 150, y: 280, w: 300, h: 50 };
+                const levelsBtn = { x: WIDTH/2 - 150, y: 350, w: 300, h: 50 };
+                
+                if (x >= classicBtn.x && x <= classicBtn.x + classicBtn.w &&
+                    y >= classicBtn.y && y <= classicBtn.y + classicBtn.h) {
+                    this.gameMode = "CLASSIC";
+                    this.currentLevel = 1;
+                    this.levelTarget = 100;
+                    return;
+                }
+                
+                if (x >= levelsBtn.x && x <= levelsBtn.x + levelsBtn.w &&
+                    y >= levelsBtn.y && y <= levelsBtn.y + levelsBtn.h) {
+                    this.gameMode = "LEVELS";
+                    this.currentLevel = this.nextLevel;
+                    const levelKey = String(this.currentLevel);
+                    if (this.bestScores.LEVELS && this.bestScores.LEVELS[levelKey]) {
+                        this.levelTarget = this.bestScores.LEVELS[levelKey];
+                    } else {
+                        this.levelTarget = 50 + (this.currentLevel - 1) * 50;
+                    }
+                    return;
+                }
+                
+                // Кнопка "Играть"
+                const playBtn = { x: WIDTH/2 - 100, y: 430, w: 200, h: 60 };
+                if (x >= playBtn.x && x <= playBtn.x + playBtn.w &&
+                    y >= playBtn.y && y <= playBtn.y + playBtn.h) {
+                    this.gameState = "PLAYING";
+                    if (this.gameMode === "LEVELS") {
+                        this.currentLevel = this.nextLevel;
+                        this.levelTarget = 50 + (this.currentLevel - 1) * 50;
+                    }
+                    this.resetGame();
+                }
+            }
+            
+            handleGameOverClick(x, y) {
+                if (!this._gameOverButtons) return;
+                
+                for (const btn of this._gameOverButtons) {
+                    if (x >= btn.x && x <= btn.x + btn.w &&
+                        y >= btn.y && y <= btn.y + btn.h) {
+                        if (btn.text === "МЕНЮ") {
+                            this.saveCurrentScore();
+                            this.saveScores();
+                            this.gameState = "MENU";
+                            this.selected = null;
+                            this.gameOver = false;
+                        } else if (btn.text === "ПОВТОРИТЬ") {
+                            this.resetGame();
+                            this.gameOver = false;
+                            this.gameState = "PLAYING";
+                        } else if (btn.text === "СЛЕДУЮЩИЙ УРОВЕНЬ") {
+                            this.nextLevel = this.currentLevel + 1;
+                            this.currentLevel = this.nextLevel;
+                            this.levelTarget = 50 + (this.currentLevel - 1) * 50;
+                            this.saveScores();
+                            this.resetGame();
+                            this.gameOver = false;
+                            this.gameState = "PLAYING";
+                        } else if (btn.text === "РЕКОРДЫ") {
+                            this.showRecords();
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            handleMouseDown(pos) {
+                if (this.isAnimating || this.gameOver) return;
+                
+                // Проверка кнопки "Меню"
+                if (this._menuBtn) {
+                    const btn = this._menuBtn;
+                    if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
+                        pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+                        this.saveCurrentScore();
+                        this.saveScores();
+                        this.gameState = "MENU";
+                        this.selected = null;
+                        return;
+                    }
+                }
+                
+                // Проверка кнопки "Сброс"
+                if (this._resetBtn) {
+                    const btn = this._resetBtn;
+                    if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
+                        pos.y >= btn.y && pos.y <= btn.y + btn.h) {
+                        this.resetGame();
+                        return;
+                    }
+                }
+                
+                const gridPos = this.getGridPos(pos.x, pos.y);
+                if (gridPos) {
+                    const [row, col] = gridPos;
+                    if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE && this.grid[row][col] !== -1) {
+                        this.isDragging = true;
+                        this.dragStartCell = gridPos;
+                        this.dragCurrentCell = gridPos;
+                        this.dragTrail = [];
+                        this.selected = gridPos;
+                    }
+                }
+            }
+            
+            handleMouseUp(pos) {
+                if (!this.isDragging) return;
+                
+                if (this.dragStartCell) {
+                    const gridPos = this.getGridPos(pos.x, pos.y);
+                    
+                    if (gridPos && gridPos !== this.dragStartCell) {
+                        if (this.isAdjacent(this.dragStartCell, gridPos)) {
+                            if (this.trySwap(this.dragStartCell, gridPos)) {
+                                this.selected = null;
+                            } else {
+                                this.selected = this.dragStartCell;
+                            }
+                        } else {
+                            this.selected = null;
+                        }
+                    } else {
+                        if (this.selected === this.dragStartCell) {
+                            this.selected = null;
+                        } else {
+                            this.selected = this.dragStartCell;
+                        }
+                    }
+                }
+                
+                this.isDragging = false;
+                this.dragStartCell = null;
+                this.dragCurrentCell = null;
+                this.dragTrail = [];
+            }
+            
+            handleMouseMove(pos) {
+                if (this.isDragging && this.dragStartCell) {
+                    const gridPos = this.getGridPos(pos.x, pos.y);
+                    if (gridPos && gridPos !== this.dragCurrentCell) {
+                        this.dragCurrentCell = gridPos;
+                        if (this.isAdjacent(this.dragStartCell, gridPos)) {
+                            this.dragTrail.push(gridPos);
+                            if (this.dragTrail.length > 5) {
+                                this.dragTrail.shift();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            showRecords() {
+                console.log("=== РЕКОРДЫ ===");
+                console.log(`Классический режим: ${this.bestScores.CLASSIC}`);
+                console.log(`Следующий уровень: ${this.bestScores.NEXT_LEVEL || 1}`);
+                console.log("Пройденные уровни:");
+                if (this.bestScores.LEVELS) {
+                    for (const [level, score] of Object.entries(this.bestScores.LEVELS).sort((a, b) => Number(a[0]) - Number(b[0]))) {
+                        console.log(`  Уровень ${level}: ${score}`);
+                    }
+                }
+                console.log("================");
+                alert("Рекорды сохранены в localStorage. Откройте консоль (F12) для просмотра.");
+            }
+            
+            update() {
+                if (this.moveAnimation.length > 0) {
+                    this.updateMoveAnimation();
+                    return;
+                }
+                
+                this.updateAnimation();
+                
+                if (this.gameMode === "LEVELS" && this.score >= this.levelTarget && 
+                    !this.isAnimating && !this.gameOver) {
+                    this.gameOver = true;
+                    const levelKey = String(this.currentLevel);
+                    if (!this.bestScores.LEVELS[levelKey] || this.score > this.bestScores.LEVELS[levelKey]) {
+                        this.bestScores.LEVELS[levelKey] = this.score;
+                    }
+                    this.nextLevel = this.currentLevel + 1;
+                    this.saveScores();
+                }
+            }
+            
+            updateMoveAnimation() {
+                if (this.moveAnimation.length > 0) {
+                    let allDone = true;
+                    for (const move of this.moveAnimation) {
+                        if (move.progress < 1) {
+                            move.progress += move.speed;
+                            const t = move.progress;
+                            const smoothT = t * t * (3 - 2 * t);
+                            move.dx = move.endDx * smoothT;
+                            move.dy = move.endDy * smoothT;
+                            allDone = false;
+                        } else {
+                            move.dx = move.endDx;
+                            move.dy = move.endDy;
+                        }
+                    }
+                    
+                    if (allDone) {
+                        this.moveAnimation = [];
+                        this.isAnimating = false;
+                        if (this.processMatches()) {
+                            this.isAnimating = true;
+                        } else {
+                            this.selected = null;
+                            if (!this.hasValidMoves()) {
+                                this.handleNoMoves();
+                            }
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            }
+            
+            // ==================== ИГРОВОЙ ЦИКЛ ====================
+            
+            gameLoop() {
+                if (!this.running) return;
+                
+                if (this.gameState === "MENU") {
+                    this.drawMenu();
+                } else if (this.gameState === "PLAYING") {
+                    this.update();
+                    this.drawGrid();
+                    if (this.gameOver) {
+                        this.gameState = "GAME_OVER";
+                    }
+                } else if (this.gameState === "GAME_OVER") {
+                    this.drawGameOver();
+                }
+                
+                requestAnimationFrame(() => this.gameLoop());
+            }
+        }
+        
+        // ==================== ПОЛИФИЛЛЫ ====================
+        
+        // roundRect polyfill для старых браузеров
+        if (!CanvasRenderingContext2D.prototype.roundRect) {
+            CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, radii) {
+                const r = typeof radii === 'number' ? radii : (radii || 0);
+                this.moveTo(x + r, y);
+                this.arcTo(x + w, y, x + w, y + h, r);
+                this.arcTo(x + w, y + h, x, y + h, r);
+                this.arcTo(x, y + h, x, y, r);
+                this.arcTo(x, y, x + w, y, r);
+                return this;
+            };
+        }
+        
+        // ==================== ЗАПУСК ====================
+        
+        const game = new MatchThreeGame();
+    </script>
+</body>
+</html>
