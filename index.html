@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Три в ряд</title>
     <style>
         * {
@@ -19,42 +19,188 @@
             background: #1a1a2e;
             font-family: Arial, sans-serif;
             user-select: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            touch-action: none;
         }
         
         canvas {
             border-radius: 10px;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
             cursor: pointer;
+            touch-action: none;
+            max-width: 100vw;
+            max-height: 100vh;
+        }
+        
+        @media (max-width: 620px) {
+            canvas {
+                border-radius: 0;
+                max-width: 100vw;
+                max-height: 100vh;
+                width: 100vw;
+                height: 100vh;
+            }
+            body {
+                background: #1a1a2e;
+                padding: 0;
+                margin: 0;
+            }
         }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas" width="600" height="700"></canvas>
+    <canvas id="gameCanvas"></canvas>
     <script>
         // ==================== ИНИЦИАЛИЗАЦИЯ ====================
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        const WIDTH = 600;
-        const HEIGHT = 700;
-        const GRID_SIZE = 8;
-        const CELL_SIZE = WIDTH / GRID_SIZE;
-        const MARGIN = 8;
-        const TOP_OFFSET = 100;
+        // Адаптивные размеры
+        let WIDTH = 600;
+        let HEIGHT = 700;
+        let GRID_SIZE = 8;
+        let CELL_SIZE = WIDTH / GRID_SIZE;
+        let MARGIN = 8;
+        let TOP_OFFSET = 100;
+        let isMobile = false;
         
-        // Цвета фишек
-        const COLORS = {
-            0: [255, 80, 80],
-            1: [80, 255, 80],
-            2: [80, 80, 255],
-            3: [255, 255, 80],
-            4: [255, 80, 255],
-            5: [80, 255, 255]
+        // Цветовые темы
+        const COLOR_THEMES = {
+            'Обычные': {
+                0: [255, 80, 80],
+                1: [80, 255, 80],
+                2: [80, 80, 255],
+                3: [255, 255, 80],
+                4: [255, 80, 255],
+                5: [80, 255, 255]
+            },
+            'Пастельные': {
+                0: [255, 180, 180],
+                1: [180, 255, 180],
+                2: [180, 180, 255],
+                3: [255, 255, 180],
+                4: [255, 180, 255],
+                5: [180, 255, 255]
+            },
+            'Яркие': {
+                0: [255, 0, 0],
+                1: [0, 255, 0],
+                2: [0, 0, 255],
+                3: [255, 255, 0],
+                4: [255, 0, 255],
+                5: [0, 255, 255]
+            },
+            'Темные': {
+                0: [180, 50, 50],
+                1: [50, 180, 50],
+                2: [50, 50, 180],
+                3: [180, 180, 50],
+                4: [180, 50, 180],
+                5: [50, 180, 180]
+            },
+            'Неоновые': {
+                0: [255, 50, 50],
+                1: [50, 255, 50],
+                2: [50, 50, 255],
+                3: [255, 255, 50],
+                4: [255, 50, 255],
+                5: [50, 255, 255]
+            },
+            'Мятные': {
+                0: [200, 100, 150],
+                1: [100, 220, 200],
+                2: [150, 180, 255],
+                3: [255, 220, 150],
+                4: [220, 150, 255],
+                5: [150, 255, 220]
+            }
         };
+        
+        // Только белый и черный
+        const BORDER_COLORS = [
+            { name: 'Белый', color: [255, 255, 255] },
+            { name: 'Черный', color: [0, 0, 0] }
+        ];
+        
+        // Формы фишек (для каждого цвета своя)
+        const COLOR_SHAPES = {
+            0: 'square',    // Красный - квадрат
+            1: 'diamond',   // Зеленый - ромб
+            2: 'hexagon',   // Синий - шестиугольник
+            3: 'star',      // Желтый - звезда
+            4: 'circle',    // Розовый - круг
+            5: 'triangle'   // Голубой - треугольник
+        };
+        
+        // Названия форм для отображения
+        const SHAPE_NAMES = {
+            'square': 'Квадрат',
+            'circle': 'Круг',
+            'triangle': 'Треугольник',
+            'diamond': 'Ромб',
+            'star': 'Звезда',
+            'hexagon': 'Шестиугольник'
+        };
+        
+        // Все доступные формы для меню
+        const ALL_SHAPES = ['Квадрат', 'Круг', 'Треугольник', 'Ромб', 'Звезда', 'Шестиугольник'];
+        
+        // ==================== АДАПТАЦИЯ ====================
+        function resizeCanvas() {
+            const maxWidth = window.innerWidth;
+            const maxHeight = window.innerHeight;
+            
+            isMobile = maxWidth < 768;
+            
+            if (isMobile) {
+                const ratio = 600 / 700;
+                let w = maxWidth;
+                let h = maxWidth / ratio;
+                
+                if (h > maxHeight) {
+                    h = maxHeight;
+                    w = maxHeight * ratio;
+                }
+                
+                canvas.style.width = w + 'px';
+                canvas.style.height = h + 'px';
+                
+                const logicalWidth = 600;
+                const logicalHeight = 700;
+                
+                canvas.width = logicalWidth;
+                canvas.height = logicalHeight;
+                
+                WIDTH = logicalWidth;
+                HEIGHT = logicalHeight;
+                CELL_SIZE = WIDTH / GRID_SIZE;
+                TOP_OFFSET = 80;
+                MARGIN = 6;
+            } else {
+                canvas.style.width = '600px';
+                canvas.style.height = '700px';
+                canvas.width = 600;
+                canvas.height = 700;
+                
+                WIDTH = 600;
+                HEIGHT = 700;
+                CELL_SIZE = WIDTH / GRID_SIZE;
+                TOP_OFFSET = 100;
+                MARGIN = 8;
+            }
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(resizeCanvas, 300);
+        });
         
         // ==================== КЛАСС ИГРЫ ====================
         class MatchThreeGame {
             constructor() {
+                resizeCanvas();
+                
                 this.running = true;
                 this.gameState = "MENU";
                 this.gameMode = "CLASSIC";
@@ -65,6 +211,14 @@
                 this.bestScores = { CLASSIC: 0, LEVELS: {}, NEXT_LEVEL: 1 };
                 this.bgObjects = [];
                 this.bgAnimationTimer = 0;
+                
+                // Настройки
+                this.currentTheme = 'Обычные';
+                this.currentBorderColor = 'Белый';
+                this.currentShapeMode = 'individual'; // 'individual' или 'uniform'
+                this.COLORS = JSON.parse(JSON.stringify(COLOR_THEMES['Обычные']));
+                this.borderColor = [255, 255, 255];
+                this.uniformShape = 'Квадрат';
                 
                 // Анимационные данные
                 this.fallingCells = [];
@@ -78,40 +232,34 @@
                 this.dragCurrentCell = null;
                 this.dragTrail = [];
                 
-                // Шрифты
-                this.fonts = {
-                    small: '16px Arial',
-                    normal: '20px Arial',
-                    medium: '28px Arial',
-                    big: '36px Arial',
-                    title: '52px Arial',
-                    huge: '64px Arial'
-                };
+                // UI состояния
+                this.showThemeMenu = false;
+                this.showBorderMenu = false;
+                this.showShapeMenu = false;
                 
                 this.loadScores();
+                this.loadSettings();
                 this.createBackgroundObjects();
                 this.resetGame();
                 
-                // Настройка обработчиков событий
                 this.setupEventListeners();
-                
-                // Запуск игрового цикла
                 this.gameLoop();
             }
             
             createBackgroundObjects() {
                 this.bgObjects = [];
-                const colorValues = Object.values(COLORS);
-                for (let i = 0; i < 15; i++) {
+                const colorValues = Object.values(this.COLORS);
+                const count = isMobile ? 10 : 12;
+                for (let i = 0; i < count; i++) {
                     const color = colorValues[Math.floor(Math.random() * colorValues.length)];
                     this.bgObjects.push({
                         x: Math.random() * WIDTH,
                         y: Math.random() * HEIGHT,
-                        size: 20 + Math.random() * 40,
+                        size: 20 + Math.random() * (isMobile ? 30 : 40),
                         color: color,
-                        speedX: (Math.random() - 0.5) * 0.6,
-                        speedY: (Math.random() - 0.5) * 0.6,
-                        alpha: 20 + Math.random() * 40
+                        speedX: (Math.random() - 0.5) * 0.4,
+                        speedY: (Math.random() - 0.5) * 0.4,
+                        alpha: 15 + Math.random() * 30
                     });
                 }
             }
@@ -138,6 +286,74 @@
                     this.nextLevel = 1;
                     this.levelTarget = 100;
                 }
+            }
+            
+            loadSettings() {
+                try {
+                    const settings = JSON.parse(localStorage.getItem('matchThreeSettings'));
+                    if (settings) {
+                        this.currentTheme = settings.theme || 'Обычные';
+                        this.currentBorderColor = settings.borderColor || 'Белый';
+                        this.currentShapeMode = settings.shapeMode || 'individual';
+                        this.uniformShape = settings.uniformShape || 'Квадрат';
+                        this.COLORS = JSON.parse(JSON.stringify(COLOR_THEMES[this.currentTheme] || COLOR_THEMES['Обычные']));
+                        const border = BORDER_COLORS.find(b => b.name === this.currentBorderColor);
+                        this.borderColor = border ? border.color : [255, 255, 255];
+                    }
+                } catch(e) {
+                    this.currentTheme = 'Обычные';
+                    this.currentBorderColor = 'Белый';
+                    this.currentShapeMode = 'individual';
+                    this.uniformShape = 'Квадрат';
+                    this.COLORS = JSON.parse(JSON.stringify(COLOR_THEMES['Обычные']));
+                    this.borderColor = [255, 255, 255];
+                }
+            }
+            
+            saveSettings() {
+                try {
+                    const settings = {
+                        theme: this.currentTheme,
+                        borderColor: this.currentBorderColor,
+                        shapeMode: this.currentShapeMode,
+                        uniformShape: this.uniformShape
+                    };
+                    localStorage.setItem('matchThreeSettings', JSON.stringify(settings));
+                } catch(e) {}
+            }
+            
+            changeTheme(themeName) {
+                this.currentTheme = themeName;
+                this.COLORS = JSON.parse(JSON.stringify(COLOR_THEMES[themeName]));
+                this.saveSettings();
+                this.createBackgroundObjects();
+            }
+            
+            changeBorderColor(colorName) {
+                this.currentBorderColor = colorName;
+                const border = BORDER_COLORS.find(b => b.name === colorName);
+                if (border) {
+                    this.borderColor = border.color;
+                }
+                this.saveSettings();
+            }
+            
+            changeShapeMode(mode) {
+                this.currentShapeMode = mode;
+                this.saveSettings();
+            }
+            
+            changeUniformShape(shapeName) {
+                this.uniformShape = shapeName;
+                this.saveSettings();
+            }
+            
+            getShapeForColor(colorIndex) {
+                if (this.currentShapeMode === 'uniform') {
+                    return this.uniformShape;
+                }
+                const shapeKey = COLOR_SHAPES[colorIndex] || 'square';
+                return SHAPE_NAMES[shapeKey] || 'Квадрат';
             }
             
             saveScores() {
@@ -197,9 +413,10 @@
             }
             
             fillGrid() {
+                const colorKeys = Object.keys(this.COLORS).map(Number);
                 for (let row = 0; row < GRID_SIZE; row++) {
                     for (let col = 0; col < GRID_SIZE; col++) {
-                        const available = Object.keys(COLORS).map(Number);
+                        const available = [...colorKeys];
                         if (col >= 2 && this.grid[row][col-1] === this.grid[row][col-2]) {
                             const idx = available.indexOf(this.grid[row][col-1]);
                             if (idx !== -1) available.splice(idx, 1);
@@ -255,7 +472,6 @@
                             const nr = row + dr;
                             const nc = col + dc;
                             if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE && this.grid[nr][nc] !== -1) {
-                                // Пробуем обменять
                                 [this.grid[row][col], this.grid[nr][nc]] = [this.grid[nr][nc], this.grid[row][col]];
                                 const hasMatch = this.findMatches().length > 0;
                                 [this.grid[row][col], this.grid[nr][nc]] = [this.grid[nr][nc], this.grid[row][col]];
@@ -355,7 +571,7 @@
                     
                     for (let row = 0; row < emptyCount; row++) {
                         if (this.grid[row][col] === -1) {
-                            this.grid[row][col] = Math.floor(Math.random() * Object.keys(COLORS).length);
+                            this.grid[row][col] = Math.floor(Math.random() * Object.keys(this.COLORS).length);
                             this.fallingCells.push({
                                 row: row,
                                 col: col,
@@ -375,7 +591,6 @@
             }
             
             updateAnimation() {
-                // Анимация удаления
                 if (this.removingCells.length > 0) {
                     for (const rem of this.removingCells) {
                         rem.size -= rem.speed;
@@ -388,7 +603,6 @@
                     return;
                 }
                 
-                // Анимация падения
                 if (this.fallingCells.length > 0) {
                     for (const fall of this.fallingCells) {
                         fall.offset += fall.speed;
@@ -410,7 +624,6 @@
                     return;
                 }
                 
-                // Анимация обмена
                 if (this.swapAnimation.length > 0) {
                     let allDone = true;
                     for (const swap of this.swapAnimation) {
@@ -441,7 +654,6 @@
                     return;
                 }
                 
-                // Проверка совпадений
                 if (!this.isAnimating && this.removingCells.length === 0 && 
                     this.fallingCells.length === 0 && this.swapAnimation.length === 0) {
                     if (this.processMatches()) {
@@ -540,9 +752,101 @@
                 return null;
             }
             
+            // ==================== РИСОВАНИЕ ФИГУР ====================
+            
+            drawShape(ctx, shape, x, y, width, height, color, borderColor, isSelected) {
+                const cx = x + width / 2;
+                const cy = y + height / 2;
+                const size = Math.min(width, height) / 2 - 2;
+                
+                ctx.save();
+                ctx.translate(cx, cy);
+                
+                ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                ctx.strokeStyle = `rgb(${borderColor[0]}, ${borderColor[1]}, ${borderColor[2]})`;
+                ctx.lineWidth = Math.max(1.5, 2 * (isMobile ? 0.8 : 1));
+                
+                switch(shape) {
+                    case 'Квадрат':
+                        ctx.beginPath();
+                        ctx.roundRect(-size, -size, size * 2, size * 2, 4);
+                        ctx.fill();
+                        ctx.stroke();
+                        break;
+                        
+                    case 'Круг':
+                        ctx.beginPath();
+                        ctx.arc(0, 0, size, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.stroke();
+                        break;
+                        
+                    case 'Треугольник':
+                        ctx.beginPath();
+                        ctx.moveTo(0, -size);
+                        ctx.lineTo(-size * 0.866, size * 0.5);
+                        ctx.lineTo(size * 0.866, size * 0.5);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        break;
+                        
+                    case 'Ромб':
+                        ctx.beginPath();
+                        ctx.moveTo(0, -size);
+                        ctx.lineTo(size, 0);
+                        ctx.lineTo(0, size);
+                        ctx.lineTo(-size, 0);
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        break;
+                        
+                    case 'Звезда':
+                        ctx.beginPath();
+                        const spikes = 5;
+                        const outerRadius = size;
+                        const innerRadius = size * 0.4;
+                        for (let i = 0; i < spikes * 2; i++) {
+                            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+                            const angle = (i * Math.PI) / spikes - Math.PI / 2;
+                            if (i === 0) ctx.moveTo(radius * Math.cos(angle), radius * Math.sin(angle));
+                            else ctx.lineTo(radius * Math.cos(angle), radius * Math.sin(angle));
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        break;
+                        
+                    case 'Шестиугольник':
+                        ctx.beginPath();
+                        for (let i = 0; i < 6; i++) {
+                            const angle = (i * Math.PI * 2) / 6 - Math.PI / 2;
+                            const r = size;
+                            if (i === 0) ctx.moveTo(r * Math.cos(angle), r * Math.sin(angle));
+                            else ctx.lineTo(r * Math.cos(angle), r * Math.sin(angle));
+                        }
+                        ctx.closePath();
+                        ctx.fill();
+                        ctx.stroke();
+                        break;
+                        
+                    default:
+                        ctx.beginPath();
+                        ctx.roundRect(-size, -size, size * 2, size * 2, 4);
+                        ctx.fill();
+                        ctx.stroke();
+                }
+                
+                ctx.restore();
+            }
+            
             // ==================== ОТРИСОВКА ====================
             
             drawMenu() {
+                const isMobile = window.innerWidth < 768;
+                const scale = isMobile ? 0.8 : 1;
+                
                 ctx.fillStyle = '#1e1e32';
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
                 
@@ -564,179 +868,417 @@
                 }
                 ctx.globalAlpha = 1;
                 
-                // Заголовок
+                // Заголовок - УВЕЛИЧЕН
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
-                // Тень
-                ctx.font = this.fonts.title;
+                const titleY = isMobile ? 55 : 90;
+                const titleSize = isMobile ? 34 : 52;
+                ctx.font = `bold ${titleSize}px Arial`;
                 ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                ctx.fillText('ТРИ В РЯД', WIDTH/2 + 4, 154);
-                
-                // Основной текст
+                ctx.fillText('ТРИ В РЯД', WIDTH/2 + 3, titleY + 3);
                 ctx.fillStyle = '#ffd700';
-                ctx.fillText('ТРИ В РЯД', WIDTH/2, 150);
+                ctx.fillText('ТРИ В РЯД', WIDTH/2, titleY);
                 
                 // Информация
+                const infoY = isMobile ? 85 : 140;
+                ctx.font = `${isMobile ? 12 : 18}px Arial`;
+                ctx.fillStyle = '#cccccc';
                 if (this.gameMode === "LEVELS") {
-                    ctx.font = this.fonts.normal;
-                    ctx.fillStyle = '#cccccc';
-                    ctx.fillText(`Следующий уровень: ${this.nextLevel}`, WIDTH/2, 210);
-                    
-                    ctx.font = this.fonts.small;
+                    ctx.fillText(`Следующий уровень: ${this.nextLevel}`, WIDTH/2, infoY);
+                    ctx.font = `${isMobile ? 10 : 14}px Arial`;
                     ctx.fillStyle = '#999999';
                     const completed = Object.keys(this.bestScores.LEVELS || {}).length;
-                    ctx.fillText(`Пройдено уровней: ${completed}`, WIDTH/2, 235);
+                    ctx.fillText(`Пройдено уровней: ${completed}`, WIDTH/2, infoY + 22);
                 } else {
-                    ctx.font = this.fonts.normal;
-                    ctx.fillStyle = '#cccccc';
-                    ctx.fillText(`Рекорд: ${this.highScore}`, WIDTH/2, 210);
+                    ctx.fillText(`Рекорд: ${this.highScore}`, WIDTH/2, infoY);
                 }
                 
-                // Кнопки режимов
+                // Кнопки режимов - ЕЩЕ БОЛЬШЕ
+                const btnW = isMobile ? 260 : 360;
+                const btnH = isMobile ? 42 : 52;
+                const btnStartX = (WIDTH - btnW) / 2;
+                const btnY1 = isMobile ? 115 : 190;
+                const btnY2 = isMobile ? 168 : 255;
+                const spacing = isMobile ? 11 : 18;
+                
                 const buttons = [
-                    { text: 'КЛАССИЧЕСКИЙ', x: WIDTH/2 - 150, y: 280, w: 300, h: 50, active: this.gameMode === "CLASSIC" },
-                    { text: 'УРОВНИ', x: WIDTH/2 - 150, y: 350, w: 300, h: 50, active: this.gameMode === "LEVELS" }
+                    { text: 'КЛАССИЧЕСКИЙ', x: btnStartX, y: btnY1, w: btnW, h: btnH, active: this.gameMode === "CLASSIC" },
+                    { text: 'УРОВНИ', x: btnStartX, y: btnY2, w: btnW, h: btnH, active: this.gameMode === "LEVELS" }
                 ];
                 
                 for (const btn of buttons) {
                     ctx.fillStyle = btn.active ? '#6464c8' : '#3c3c78';
                     ctx.beginPath();
-                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 14);
                     ctx.fill();
                     ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 2;
+                    ctx.lineWidth = 3;
                     ctx.beginPath();
-                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 14);
                     ctx.stroke();
                     
                     if (btn.active) {
                         ctx.strokeStyle = '#ffd700';
                         ctx.lineWidth = 4;
                         ctx.beginPath();
-                        ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+                        ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 14);
                         ctx.stroke();
                     }
                     
-                    ctx.font = this.fonts.normal;
+                    ctx.font = `${isMobile ? 15 : 20}px Arial`;
                     ctx.fillStyle = '#ffffff';
                     ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
                 }
                 
-                // Кнопка "Играть"
-                const playBtn = { x: WIDTH/2 - 100, y: 430, w: 200, h: 60 };
-                const pulse = Math.sin(Date.now() / 500) * 3;
+                // Кнопка "Играть" - ЕЩЕ БОЛЬШЕ
+                const playW = isMobile ? 200 : 260;
+                const playH = isMobile ? 52 : 62;
+                const playX = (WIDTH - playW) / 2;
+                const playY = isMobile ? 225 : 330;
                 
-                for (let i = 0; i < 60; i++) {
-                    const colorVal = 100 + Math.floor(100 * (i / 60));
-                    ctx.fillStyle = `rgb(${colorVal}, ${200 + Math.floor(55 * (i / 60))}, ${100 + Math.floor(100 * (i / 60))})`;
-                    ctx.fillRect(playBtn.x, playBtn.y + i, playBtn.w, 1);
+                for (let i = 0; i < playH; i++) {
+                    const colorVal = 100 + Math.floor(100 * (i / playH));
+                    ctx.fillStyle = `rgb(${colorVal}, ${200 + Math.floor(55 * (i / playH))}, ${100 + Math.floor(100 * (i / playH))})`;
+                    ctx.fillRect(playX, playY + i, playW, 1);
                 }
                 
                 ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 3;
+                ctx.lineWidth = 4;
                 ctx.beginPath();
-                ctx.roundRect(playBtn.x, playBtn.y, playBtn.w, playBtn.h, 10);
+                ctx.roundRect(playX, playY, playW, playH, 14);
                 ctx.stroke();
                 
-                ctx.font = this.fonts.normal;
+                ctx.font = `bold ${isMobile ? 18 : 24}px Arial`;
                 ctx.fillStyle = '#ffffff';
-                ctx.fillText('ИГРАТЬ', playBtn.x + playBtn.w/2, playBtn.y + playBtn.h/2);
+                ctx.fillText('ИГРАТЬ', playX + playW/2, playY + playH/2);
                 
-                // Информация
-                ctx.font = this.fonts.small;
-                ctx.fillStyle = '#b4b4b4';
-                if (this.gameMode === "CLASSIC") {
-                    ctx.fillText('Классический режим - набирайте очки!', WIDTH/2, 520);
-                } else {
-                    ctx.fillText(`Уровень ${this.nextLevel} - цель: ${this.levelTarget} очков`, WIDTH/2, 520);
-                }
+                // Кнопки настроек - ЕЩЕ БОЛЬШЕ
+                const btnWSmall = isMobile ? 130 : 160;
+                const btnHSmall = isMobile ? 42 : 50;
+                const spacingSmall = isMobile ? 10 : 15;
+                const totalWidthSmall = btnWSmall * 3 + spacingSmall * 2;
+                const startXSmall = (WIDTH - totalWidthSmall) / 2;
+                const btnYSmall = isMobile ? 295 : 430;
                 
-                ctx.fillStyle = '#969696';
-                ctx.fillText('Нажмите SPACE для быстрого старта | ESC для выхода', WIDTH/2, HEIGHT - 30);
+                const themeBtn = { x: startXSmall, y: btnYSmall, w: btnWSmall, h: btnHSmall };
+                const borderBtn = { x: startXSmall + btnWSmall + spacingSmall, y: btnYSmall, w: btnWSmall, h: btnHSmall };
+                const shapeBtn = { x: startXSmall + (btnWSmall + spacingSmall) * 2, y: btnYSmall, w: btnWSmall, h: btnHSmall };
                 
-                // Иконки цветов
-                const iconSize = 30;
-                const iconMargin = 10;
-                const totalWidth = Object.keys(COLORS).length * (iconSize + iconMargin) - iconMargin;
-                let startX = (WIDTH - totalWidth) / 2;
-                for (const color of Object.values(COLORS)) {
-                    ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+                const settingsBtns = [
+                    { btn: themeBtn, text: '🎨 Цвета' },
+                    { btn: borderBtn, text: '✏️ Обводка' },
+                    { btn: shapeBtn, text: '⬛ Форма' }
+                ];
+                
+                for (const { btn, text } of settingsBtns) {
+                    ctx.fillStyle = '#4c4c8c';
                     ctx.beginPath();
-                    ctx.roundRect(startX, 560, iconSize, iconSize, 5);
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 12);
                     ctx.fill();
-                    ctx.strokeStyle = '#c8c8c8';
+                    ctx.strokeStyle = '#ffffff';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
-                    ctx.roundRect(startX, 560, iconSize, iconSize, 5);
+                    ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 12);
                     ctx.stroke();
-                    startX += iconSize + iconMargin;
+                    ctx.font = `${isMobile ? 11 : 15}px Arial`;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(text, btn.x + btn.w/2, btn.y + btn.h/2);
+                }
+                
+                // Текущие настройки
+                const settingsY = isMobile ? 355 : 495;
+                ctx.font = `${isMobile ? 10 : 13}px Arial`;
+                ctx.fillStyle = '#888888';
+                const shapeModeText = this.currentShapeMode === 'individual' ? 'Индивидуальные' : 'Одинаковые';
+                ctx.fillText(`Тема: ${this.currentTheme} | Обводка: ${this.currentBorderColor} | Форма: ${shapeModeText}`, WIDTH/2, settingsY);
+                
+                // Информация о режиме
+                const infoTextY = isMobile ? 390 : 540;
+                ctx.font = `${isMobile ? 11 : 15}px Arial`;
+                ctx.fillStyle = '#b4b4b4';
+                if (this.gameMode === "CLASSIC") {
+                    ctx.fillText('Классический режим - набирайте очки!', WIDTH/2, infoTextY);
+                } else {
+                    ctx.fillText(`Уровень ${this.nextLevel} - цель: ${this.levelTarget} очков`, WIDTH/2, infoTextY);
+                }
+                
+                // Нижняя информация
+                const bottomY = isMobile ? HEIGHT - 22 : HEIGHT - 28;
+                ctx.font = `${isMobile ? 9 : 13}px Arial`;
+                ctx.fillStyle = '#969696';
+                ctx.fillText('Нажмите SPACE для старта | ESC для выхода', WIDTH/2, bottomY);
+                
+                // Иконки цветов с их формами - УВЕЛИЧЕНЫ
+                const iconSize = isMobile ? 26 : 34;
+                const iconMargin = isMobile ? 6 : 10;
+                const colorKeys = Object.keys(this.COLORS);
+                const totalWidthIcons = colorKeys.length * (iconSize + iconMargin) - iconMargin;
+                let startXIcon = (WIDTH - totalWidthIcons) / 2;
+                const iconY = isMobile ? 420 : 570;
+                
+                for (const key of colorKeys) {
+                    const color = this.COLORS[key];
+                    const x = startXIcon;
+                    const y = iconY;
+                    const shape = this.getShapeForColor(parseInt(key));
+                    this.drawShape(ctx, shape, x, y, iconSize, iconSize, color, this.borderColor, false);
+                    startXIcon += iconSize + iconMargin;
+                }
+                
+                // Меню выбора темы
+                if (this.showThemeMenu) {
+                    this.drawThemeMenu(themeBtn.x, themeBtn.y + themeBtn.h + 3);
+                }
+                
+                // Меню выбора обводки
+                if (this.showBorderMenu) {
+                    this.drawBorderMenu(borderBtn.x, borderBtn.y + borderBtn.h + 3);
+                }
+                
+                // Меню выбора формы
+                if (this.showShapeMenu) {
+                    this.drawShapeMenu(shapeBtn.x, shapeBtn.y + shapeBtn.h + 3);
+                }
+            }
+            
+            drawThemeMenu(x, y) {
+                const isMobile = window.innerWidth < 768;
+                const themeNames = Object.keys(COLOR_THEMES);
+                const itemHeight = isMobile ? 32 : 40;
+                const totalHeight = themeNames.length * itemHeight + 8;
+                const menuWidth = isMobile ? 160 : 190;
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                ctx.fillStyle = 'rgba(30, 30, 50, 0.98)';
+                ctx.beginPath();
+                ctx.roundRect(x, y, menuWidth, totalHeight, 8);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(x, y, menuWidth, totalHeight, 8);
+                ctx.stroke();
+                
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.font = `${isMobile ? 12 : 15}px Arial`;
+                
+                for (let i = 0; i < themeNames.length; i++) {
+                    const name = themeNames[i];
+                    const itemY = y + 4 + i * itemHeight;
+                    
+                    if (name === this.currentTheme) {
+                        ctx.fillStyle = 'rgba(255, 215, 0, 0.25)';
+                        ctx.fillRect(x + 2, itemY, menuWidth - 4, itemHeight - 2);
+                    }
+                    
+                    const colors = COLOR_THEMES[name];
+                    const firstColor = colors[0];
+                    const boxSize = isMobile ? 16 : 22;
+                    ctx.fillStyle = `rgb(${firstColor[0]}, ${firstColor[1]}, ${firstColor[2]})`;
+                    ctx.fillRect(x + 10, itemY + (itemHeight - boxSize) / 2, boxSize, boxSize);
+                    ctx.strokeStyle = '#888888';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x + 10, itemY + (itemHeight - boxSize) / 2, boxSize, boxSize);
+                    
+                    ctx.fillStyle = name === this.currentTheme ? '#ffd700' : '#cccccc';
+                    ctx.fillText(name, x + 36, itemY + itemHeight/2);
+                }
+            }
+            
+            drawBorderMenu(x, y) {
+                const isMobile = window.innerWidth < 768;
+                const itemHeight = isMobile ? 42 : 50;
+                const totalHeight = BORDER_COLORS.length * itemHeight + 8;
+                const menuWidth = isMobile ? 160 : 190;
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                ctx.fillStyle = 'rgba(30, 30, 50, 0.98)';
+                ctx.beginPath();
+                ctx.roundRect(x, y, menuWidth, totalHeight, 8);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(x, y, menuWidth, totalHeight, 8);
+                ctx.stroke();
+                
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.font = `${isMobile ? 14 : 18}px Arial`;
+                
+                for (let i = 0; i < BORDER_COLORS.length; i++) {
+                    const border = BORDER_COLORS[i];
+                    const itemY = y + 4 + i * itemHeight;
+                    
+                    if (border.name === this.currentBorderColor) {
+                        ctx.fillStyle = 'rgba(255, 215, 0, 0.25)';
+                        ctx.fillRect(x + 2, itemY, menuWidth - 4, itemHeight - 2);
+                    }
+                    
+                    const boxSize = isMobile ? 24 : 32;
+                    ctx.fillStyle = `rgb(${border.color[0]}, ${border.color[1]}, ${border.color[2]})`;
+                    ctx.fillRect(x + 12, itemY + (itemHeight - boxSize) / 2, boxSize, boxSize);
+                    ctx.strokeStyle = '#888888';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x + 12, itemY + (itemHeight - boxSize) / 2, boxSize, boxSize);
+                    
+                    ctx.fillStyle = border.name === this.currentBorderColor ? '#ffd700' : '#cccccc';
+                    ctx.fillText(border.name, x + 46, itemY + itemHeight/2);
+                }
+            }
+            
+            drawShapeMenu(x, y) {
+                const isMobile = window.innerWidth < 768;
+                const itemHeight = isMobile ? 38 : 46;
+                
+                const modes = [
+                    { id: 'individual', label: 'Индивидуальные', icon: '🎨' },
+                    { id: 'uniform', label: 'Одинаковые', icon: '⬛' }
+                ];
+                
+                const modeMenuHeight = modes.length * itemHeight + 8;
+                const shapeMenuHeight = this.currentShapeMode === 'uniform' ? ALL_SHAPES.length * itemHeight + 8 : 0;
+                const totalHeight = modeMenuHeight + shapeMenuHeight;
+                const menuWidth = isMobile ? 200 : 240;
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.4)';
+                ctx.fillRect(0, 0, WIDTH, HEIGHT);
+                
+                ctx.fillStyle = 'rgba(30, 30, 50, 0.98)';
+                ctx.beginPath();
+                ctx.roundRect(x, y, menuWidth, totalHeight, 8);
+                ctx.fill();
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(x, y, menuWidth, totalHeight, 8);
+                ctx.stroke();
+                
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                
+                for (let i = 0; i < modes.length; i++) {
+                    const mode = modes[i];
+                    const itemY = y + 4 + i * itemHeight;
+                    
+                    if (mode.id === this.currentShapeMode) {
+                        ctx.fillStyle = 'rgba(255, 215, 0, 0.25)';
+                        ctx.fillRect(x + 2, itemY, menuWidth - 4, itemHeight - 2);
+                    }
+                    
+                    ctx.font = `${isMobile ? 15 : 19}px Arial`;
+                    ctx.fillStyle = mode.id === this.currentShapeMode ? '#ffd700' : '#cccccc';
+                    ctx.fillText(`${mode.icon} ${mode.label}`, x + 14, itemY + itemHeight/2);
+                }
+                
+                if (this.currentShapeMode === 'uniform') {
+                    const startY = y + 4 + modes.length * itemHeight;
+                    
+                    ctx.strokeStyle = '#555555';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(x + 12, startY);
+                    ctx.lineTo(x + menuWidth - 12, startY);
+                    ctx.stroke();
+                    
+                    const icons = {
+                        'Квадрат': '▢',
+                        'Круг': '○',
+                        'Треугольник': '△',
+                        'Ромб': '◇',
+                        'Звезда': '★',
+                        'Шестиугольник': '⬡'
+                    };
+                    
+                    for (let i = 0; i < ALL_SHAPES.length; i++) {
+                        const shapeName = ALL_SHAPES[i];
+                        const itemY = startY + 4 + i * itemHeight;
+                        
+                        if (shapeName === this.uniformShape) {
+                            ctx.fillStyle = 'rgba(255, 215, 0, 0.25)';
+                            ctx.fillRect(x + 2, itemY, menuWidth - 4, itemHeight - 2);
+                        }
+                        
+                        ctx.font = `${isMobile ? 18 : 22}px Arial`;
+                        ctx.fillStyle = shapeName === this.uniformShape ? '#ffd700' : '#cccccc';
+                        ctx.fillText(icons[shapeName] || '▢', x + 14, itemY + itemHeight/2 + 1);
+                        
+                        ctx.font = `${isMobile ? 12 : 16}px Arial`;
+                        ctx.fillStyle = shapeName === this.uniformShape ? '#ffd700' : '#cccccc';
+                        ctx.fillText(shapeName, x + 44, itemY + itemHeight/2);
+                    }
                 }
             }
             
             drawGameOver() {
-                // Затемнение
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                const isMobile = window.innerWidth < 768;
+                const scale = isMobile ? 0.7 : 1;
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.75)';
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
                 
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 
-                // Заголовок
-                ctx.font = this.fonts.huge;
+                const titleSize = isMobile ? 32 : 56;
+                ctx.font = `bold ${titleSize}px Arial`;
                 if (this.gameMode === "CLASSIC") {
                     ctx.fillStyle = '#ff6464';
-                    ctx.fillText('ИГРА ОКОНЧЕНА', WIDTH/2, HEIGHT/2 - 150);
+                    ctx.fillText('ИГРА ОКОНЧЕНА', WIDTH/2, HEIGHT/2 - 140 * scale);
                 } else {
                     if (this.score >= this.levelTarget) {
                         ctx.fillStyle = '#64ff64';
-                        ctx.fillText('УРОВЕНЬ ПРОЙДЕН!', WIDTH/2, HEIGHT/2 - 150);
+                        ctx.fillText('УРОВЕНЬ ПРОЙДЕН!', WIDTH/2, HEIGHT/2 - 140 * scale);
                     } else {
                         ctx.fillStyle = '#ff6464';
-                        ctx.fillText('ИГРА ОКОНЧЕНА', WIDTH/2, HEIGHT/2 - 150);
+                        ctx.fillText('ИГРА ОКОНЧЕНА', WIDTH/2, HEIGHT/2 - 140 * scale);
                     }
                 }
                 
-                // Счет
-                ctx.font = this.fonts.medium;
+                const scoreSize = isMobile ? 22 : 28;
+                ctx.font = `${scoreSize}px Arial`;
                 ctx.fillStyle = '#ffffff';
-                ctx.fillText(`Счет: ${this.score}`, WIDTH/2, HEIGHT/2 - 80);
+                ctx.fillText(`Счет: ${this.score}`, WIDTH/2, HEIGHT/2 - 80 * scale);
                 
-                // Информация
-                ctx.font = this.fonts.normal;
+                const infoSize = isMobile ? 14 : 18;
+                ctx.font = `${infoSize}px Arial`;
                 if (this.gameMode === "CLASSIC") {
                     ctx.fillStyle = '#c8c8c8';
-                    ctx.fillText(`Рекорд: ${this.highScore}`, WIDTH/2, HEIGHT/2 - 30);
+                    ctx.fillText(`Рекорд: ${this.highScore}`, WIDTH/2, HEIGHT/2 - 35 * scale);
                 } else {
                     if (this.score >= this.levelTarget) {
                         ctx.fillStyle = '#64ff64';
-                        ctx.fillText(`Уровень ${this.currentLevel} пройден!`, WIDTH/2, HEIGHT/2 - 30);
-                        ctx.font = this.fonts.small;
+                        ctx.fillText(`Уровень ${this.currentLevel} пройден!`, WIDTH/2, HEIGHT/2 - 35 * scale);
+                        ctx.font = `${isMobile ? 11 : 16}px Arial`;
                         ctx.fillStyle = '#c8c8c8';
-                        ctx.fillText(`Следующий уровень: ${this.currentLevel + 1}`, WIDTH/2, HEIGHT/2 + 10);
-                        
-                        const completed = Object.keys(this.bestScores.LEVELS || {}).length;
-                        const extra = this.bestScores.LEVELS[String(this.currentLevel)] ? 0 : 1;
-                        ctx.fillStyle = '#969696';
-                        ctx.fillText(`Пройдено уровней: ${completed + extra}`, WIDTH/2, HEIGHT/2 + 40);
+                        ctx.fillText(`Следующий уровень: ${this.currentLevel + 1}`, WIDTH/2, HEIGHT/2 + 10 * scale);
                     } else {
                         ctx.fillStyle = '#c8c8c8';
-                        ctx.fillText(`Попробуйте снова уровень ${this.currentLevel}`, WIDTH/2, HEIGHT/2 - 30);
+                        ctx.fillText(`Попробуйте снова уровень ${this.currentLevel}`, WIDTH/2, HEIGHT/2 - 35 * scale);
                     }
                 }
                 
-                // Кнопки
-                const buttonYStart = HEIGHT/2 + 60;
-                const buttonSpacing = 65;
+                const buttonYStart = HEIGHT/2 + (isMobile ? 40 : 55);
+                const buttonSpacing = isMobile ? 45 : 55;
+                const btnW = isMobile ? 180 : 220;
+                const btnH = isMobile ? 38 : 46;
+                
                 const buttons = [];
                 
                 if (this.gameMode === "CLASSIC" || this.score < this.levelTarget) {
-                    buttons.push({ text: 'ПОВТОРИТЬ', x: WIDTH/2 - 100, y: buttonYStart, w: 200, h: 50 });
+                    buttons.push({ text: 'ПОВТОРИТЬ', x: WIDTH/2 - btnW/2, y: buttonYStart, w: btnW, h: btnH });
                 } else {
-                    buttons.push({ text: 'СЛЕДУЮЩИЙ УРОВЕНЬ', x: WIDTH/2 - 120, y: buttonYStart, w: 240, h: 50 });
+                    const nextW = isMobile ? 200 : 260;
+                    buttons.push({ text: 'СЛЕДУЮЩИЙ УРОВЕНЬ', x: WIDTH/2 - nextW/2, y: buttonYStart, w: nextW, h: btnH });
                 }
-                buttons.push({ text: 'МЕНЮ', x: WIDTH/2 - 100, y: buttonYStart + buttonSpacing, w: 200, h: 50 });
-                buttons.push({ text: 'РЕКОРДЫ', x: WIDTH/2 - 100, y: buttonYStart + buttonSpacing * 2, w: 200, h: 50 });
+                buttons.push({ text: 'МЕНЮ', x: WIDTH/2 - btnW/2, y: buttonYStart + buttonSpacing, w: btnW, h: btnH });
+                buttons.push({ text: 'РЕКОРДЫ', x: WIDTH/2 - btnW/2, y: buttonYStart + buttonSpacing * 2, w: btnW, h: btnH });
                 
                 for (const btn of buttons) {
                     let color;
@@ -755,40 +1297,40 @@
                     ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
                     ctx.stroke();
                     
-                    ctx.font = this.fonts.normal;
+                    const btnSize = isMobile ? 12 : 17;
+                    ctx.font = `${btnSize}px Arial`;
                     ctx.fillStyle = '#ffffff';
                     ctx.fillText(btn.text, btn.x + btn.w/2, btn.y + btn.h/2);
                     
-                    // Сохраняем данные кнопки для обработки кликов
                     btn._rect = { x: btn.x, y: btn.y, w: btn.w, h: btn.h };
                 }
                 
-                // Сохраняем кнопки для обработки кликов
                 this._gameOverButtons = buttons;
             }
             
             drawGrid() {
+                const isMobile = window.innerWidth < 768;
+                
                 ctx.fillStyle = '#323232';
                 ctx.fillRect(0, 0, WIDTH, HEIGHT);
                 
-                // Заголовок
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.font = this.fonts.normal;
+                ctx.font = `${isMobile ? 16 : 20}px Arial`;
                 ctx.fillStyle = '#ffffff';
                 ctx.fillText('Три в ряд', WIDTH/2, 10 + 18);
                 
                 ctx.textAlign = 'left';
-                ctx.font = this.fonts.small;
+                ctx.font = `${isMobile ? 11 : 14}px Arial`;
                 ctx.fillStyle = '#c8c8c8';
                 ctx.fillText(this.gameMode === "CLASSIC" ? 'Классический' : `Уровень ${this.currentLevel}`, 10, 40);
                 
-                ctx.font = this.fonts.normal;
+                ctx.font = `${isMobile ? 16 : 20}px Arial`;
                 ctx.fillStyle = '#ffffff';
                 ctx.fillText(`Счет: ${this.score}`, 10, 60);
                 
                 if (this.gameMode === "LEVELS") {
-                    ctx.font = this.fonts.small;
+                    ctx.font = `${isMobile ? 11 : 14}px Arial`;
                     ctx.fillStyle = '#c8c8c8';
                     ctx.fillText(`Цель: ${this.levelTarget}`, 10, 85);
                     
@@ -805,12 +1347,14 @@
                     const levelKey = String(this.currentLevel);
                     if (this.bestScores.LEVELS && this.bestScores.LEVELS[levelKey]) {
                         ctx.fillStyle = '#c8c8c8';
-                        ctx.fillText(`Рекорд уровня: ${this.bestScores.LEVELS[levelKey]}`, 220, 85);
+                        ctx.fillText(`Рекорд: ${this.bestScores.LEVELS[levelKey]}`, 220, 85);
                     }
                 }
                 
                 // Кнопки
-                const menuBtn = { x: WIDTH - 230, y: 55, w: 100, h: 35 };
+                const btnW = isMobile ? 70 : 100;
+                const btnH = isMobile ? 28 : 35;
+                const menuBtn = { x: WIDTH - btnW - 10, y: 55, w: btnW, h: btnH };
                 ctx.fillStyle = '#4646c8';
                 ctx.beginPath();
                 ctx.roundRect(menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8);
@@ -822,11 +1366,11 @@
                 ctx.stroke();
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.font = this.fonts.small;
+                ctx.font = `${isMobile ? 10 : 14}px Arial`;
                 ctx.fillStyle = '#ffffff';
                 ctx.fillText('Меню', menuBtn.x + menuBtn.w/2, menuBtn.y + menuBtn.h/2);
                 
-                const resetBtn = { x: WIDTH - 110, y: 55, w: 90, h: 35 };
+                const resetBtn = { x: WIDTH - btnW * 2 - 20, y: 55, w: btnW, h: btnH };
                 ctx.fillStyle = '#c84646';
                 ctx.beginPath();
                 ctx.roundRect(resetBtn.x, resetBtn.y, resetBtn.w, resetBtn.h, 8);
@@ -839,7 +1383,6 @@
                 ctx.fillStyle = '#ffffff';
                 ctx.fillText('Сброс', resetBtn.x + resetBtn.w/2, resetBtn.y + resetBtn.h/2);
                 
-                // Сохраняем кнопки для обработки кликов
                 this._menuBtn = menuBtn;
                 this._resetBtn = resetBtn;
                 
@@ -849,7 +1392,9 @@
                         if (this.grid[row][col] === -1) continue;
                         
                         const rect = this.getCellRect(row, col);
-                        const color = COLORS[this.grid[row][col]];
+                        const colorIndex = this.grid[row][col];
+                        const color = this.COLORS[colorIndex];
+                        const shape = this.getShapeForColor(colorIndex);
                         
                         let fallOffset = 0;
                         for (const fall of this.fallingCells) {
@@ -896,22 +1441,13 @@
                             const x = rect.x + swapOffset.x + moveOffset.x;
                             const y = rect.y + fallOffset + swapOffset.y + moveOffset.y;
                             
-                            ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-                            ctx.beginPath();
-                            ctx.roundRect(x, y, rect.width, rect.height, 5);
-                            ctx.fill();
-                            
-                            ctx.strokeStyle = '#c8c8c8';
-                            ctx.lineWidth = 2;
-                            ctx.beginPath();
-                            ctx.roundRect(x, y, rect.width, rect.height, 5);
-                            ctx.stroke();
+                            this.drawShape(ctx, shape, x, y, rect.width, rect.height, color, this.borderColor, false);
                             
                             if (this.selected && this.selected[0] === row && this.selected[1] === col && !this.isDragging) {
                                 ctx.strokeStyle = '#ffffff';
-                                ctx.lineWidth = 4;
+                                ctx.lineWidth = 3;
                                 ctx.beginPath();
-                                ctx.roundRect(x, y, rect.width, rect.height, 5);
+                                ctx.roundRect(x - 2, y - 2, rect.width + 4, rect.height + 4, 5);
                                 ctx.stroke();
                             }
                         }
@@ -923,7 +1459,9 @@
                     const [row, col] = this.dragStartCell;
                     if (row >= 0 && row < GRID_SIZE && col >= 0 && col < GRID_SIZE && this.grid[row][col] !== -1) {
                         const rect = this.getCellRect(row, col);
-                        const color = COLORS[this.grid[row][col]];
+                        const colorIndex = this.grid[row][col];
+                        const color = this.COLORS[colorIndex];
+                        const shape = this.getShapeForColor(colorIndex);
                         
                         const scale = 1.15;
                         const w = rect.width * scale;
@@ -931,17 +1469,13 @@
                         
                         const mouse = this._mousePos || { x: 0, y: 0 };
                         
-                        // Тень
                         ctx.shadowColor = 'rgba(0,0,0,0.5)';
                         ctx.shadowBlur = 10;
                         ctx.shadowOffsetX = 3;
                         ctx.shadowOffsetY = 3;
                         
                         ctx.globalAlpha = 0.85;
-                        ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-                        ctx.beginPath();
-                        ctx.roundRect(mouse.x - w/2, mouse.y - h/2, w, h, 5);
-                        ctx.fill();
+                        this.drawShape(ctx, shape, mouse.x - w/2, mouse.y - h/2, w, h, color, this.borderColor, false);
                         ctx.globalAlpha = 1;
                         
                         ctx.shadowColor = 'transparent';
@@ -949,18 +1483,10 @@
                         ctx.shadowOffsetX = 0;
                         ctx.shadowOffsetY = 0;
                         
-                        ctx.strokeStyle = 'rgba(255,255,255,0.6)';
-                        ctx.lineWidth = 3;
-                        ctx.beginPath();
-                        ctx.roundRect(mouse.x - w/2, mouse.y - h/2, w, h, 5);
-                        ctx.stroke();
-                        
-                        // Подсветка соседних клеток
                         this.drawAdjacentHint(row, col);
                     }
                 }
                 
-                // След перетаскивания
                 for (const pos of this.dragTrail) {
                     if (pos !== this.dragStartCell) {
                         const [row, col] = pos;
@@ -995,47 +1521,61 @@
             // ==================== ОБРАБОТКА СОБЫТИЙ ====================
             
             setupEventListeners() {
-                canvas.addEventListener('mousedown', (e) => {
+                const getPos = (e) => {
                     const rect = canvas.getBoundingClientRect();
                     const scaleX = canvas.width / rect.width;
                     const scaleY = canvas.height / rect.height;
-                    const x = (e.clientX - rect.left) * scaleX;
-                    const y = (e.clientY - rect.top) * scaleY;
+                    let clientX, clientY;
                     
+                    if (e.touches) {
+                        clientX = e.touches[0].clientX;
+                        clientY = e.touches[0].clientY;
+                        e.preventDefault();
+                    } else {
+                        clientX = e.clientX;
+                        clientY = e.clientY;
+                    }
+                    
+                    const x = (clientX - rect.left) * scaleX;
+                    const y = (clientY - rect.top) * scaleY;
+                    return { x, y };
+                };
+                
+                const onDown = (e) => {
+                    const pos = getPos(e);
                     if (this.gameState === "MENU") {
-                        this.handleMenuClick(x, y);
+                        this.handleMenuClick(pos.x, pos.y);
                     } else if (this.gameState === "PLAYING") {
-                        this.handleMouseDown({ x, y });
+                        this.handleMouseDown(pos);
                     } else if (this.gameState === "GAME_OVER") {
-                        this.handleGameOverClick(x, y);
+                        this.handleGameOverClick(pos.x, pos.y);
                     }
-                });
+                };
                 
-                canvas.addEventListener('mousemove', (e) => {
-                    const rect = canvas.getBoundingClientRect();
-                    const scaleX = canvas.width / rect.width;
-                    const scaleY = canvas.height / rect.height;
-                    const x = (e.clientX - rect.left) * scaleX;
-                    const y = (e.clientY - rect.top) * scaleY;
-                    
-                    this._mousePos = { x, y };
+                const onMove = (e) => {
+                    const pos = getPos(e);
+                    this._mousePos = pos;
                     
                     if (this.gameState === "PLAYING") {
-                        this.handleMouseMove({ x, y });
+                        this.handleMouseMove(pos);
                     }
-                });
+                };
                 
-                canvas.addEventListener('mouseup', (e) => {
-                    const rect = canvas.getBoundingClientRect();
-                    const scaleX = canvas.width / rect.width;
-                    const scaleY = canvas.height / rect.height;
-                    const x = (e.clientX - rect.left) * scaleX;
-                    const y = (e.clientY - rect.top) * scaleY;
-                    
+                const onUp = (e) => {
                     if (this.gameState === "PLAYING") {
-                        this.handleMouseUp({ x, y });
+                        const pos = getPos(e);
+                        this.handleMouseUp(pos);
                     }
-                });
+                };
+                
+                canvas.addEventListener('mousedown', onDown);
+                canvas.addEventListener('mousemove', onMove);
+                canvas.addEventListener('mouseup', onUp);
+                canvas.addEventListener('mouseleave', onUp);
+                
+                canvas.addEventListener('touchstart', onDown, { passive: false });
+                canvas.addEventListener('touchmove', onMove, { passive: false });
+                canvas.addEventListener('touchend', onUp, { passive: false });
                 
                 document.addEventListener('keydown', (e) => {
                     if (e.key === 'r' || e.key === 'R') {
@@ -1048,6 +1588,9 @@
                             this.gameState = "MENU";
                             this.selected = null;
                             this.gameOver = false;
+                            this.showThemeMenu = false;
+                            this.showBorderMenu = false;
+                            this.showShapeMenu = false;
                         } else if (this.gameState === "MENU") {
                             this.running = false;
                         }
@@ -1061,15 +1604,79 @@
                                 this.levelTarget = 50 + (this.currentLevel - 1) * 50;
                             }
                             this.resetGame();
+                            this.showThemeMenu = false;
+                            this.showBorderMenu = false;
+                            this.showShapeMenu = false;
                         }
                     }
                 });
             }
             
             handleMenuClick(x, y) {
+                const isMobile = window.innerWidth < 768;
+                const btnWSmall = isMobile ? 130 : 160;
+                const btnHSmall = isMobile ? 42 : 50;
+                const spacingSmall = isMobile ? 10 : 15;
+                const totalWidthSmall = btnWSmall * 3 + spacingSmall * 2;
+                const startXSmall = (WIDTH - totalWidthSmall) / 2;
+                const btnYSmall = isMobile ? 295 : 430;
+                
+                const themeBtn = { x: startXSmall, y: btnYSmall, w: btnWSmall, h: btnHSmall };
+                const borderBtn = { x: startXSmall + btnWSmall + spacingSmall, y: btnYSmall, w: btnWSmall, h: btnHSmall };
+                const shapeBtn = { x: startXSmall + (btnWSmall + spacingSmall) * 2, y: btnYSmall, w: btnWSmall, h: btnHSmall };
+                
+                // Закрытие меню при клике вне
+                if (this.showThemeMenu || this.showBorderMenu || this.showShapeMenu) {
+                    let clickedOnMenu = false;
+                    
+                    if (this.showThemeMenu) {
+                        const menuX = themeBtn.x;
+                        const menuY = themeBtn.y + themeBtn.h + 3;
+                        const menuW = isMobile ? 160 : 190;
+                        const menuH = Object.keys(COLOR_THEMES).length * (isMobile ? 32 : 40) + 8;
+                        if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
+                            clickedOnMenu = true;
+                        }
+                    }
+                    
+                    if (this.showBorderMenu) {
+                        const menuX = borderBtn.x;
+                        const menuY = borderBtn.y + borderBtn.h + 3;
+                        const menuW = isMobile ? 160 : 190;
+                        const menuH = BORDER_COLORS.length * (isMobile ? 42 : 50) + 8;
+                        if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
+                            clickedOnMenu = true;
+                        }
+                    }
+                    
+                    if (this.showShapeMenu) {
+                        const menuX = shapeBtn.x;
+                        const menuY = shapeBtn.y + shapeBtn.h + 3;
+                        const menuW = isMobile ? 200 : 240;
+                        const menuH = (2 * (isMobile ? 38 : 46) + 8) + 
+                                     (this.currentShapeMode === 'uniform' ? ALL_SHAPES.length * (isMobile ? 38 : 46) + 4 : 0);
+                        if (x >= menuX && x <= menuX + menuW && y >= menuY && y <= menuY + menuH) {
+                            clickedOnMenu = true;
+                        }
+                    }
+                    
+                    if (!clickedOnMenu) {
+                        this.showThemeMenu = false;
+                        this.showBorderMenu = false;
+                        this.showShapeMenu = false;
+                        return;
+                    }
+                }
+                
                 // Кнопки режимов
-                const classicBtn = { x: WIDTH/2 - 150, y: 280, w: 300, h: 50 };
-                const levelsBtn = { x: WIDTH/2 - 150, y: 350, w: 300, h: 50 };
+                const btnW = isMobile ? 260 : 360;
+                const btnH = isMobile ? 42 : 52;
+                const btnStartX = (WIDTH - btnW) / 2;
+                const btnY1 = isMobile ? 115 : 190;
+                const btnY2 = isMobile ? 168 : 255;
+                
+                const classicBtn = { x: btnStartX, y: btnY1, w: btnW, h: btnH };
+                const levelsBtn = { x: btnStartX, y: btnY2, w: btnW, h: btnH };
                 
                 if (x >= classicBtn.x && x <= classicBtn.x + classicBtn.w &&
                     y >= classicBtn.y && y <= classicBtn.y + classicBtn.h) {
@@ -1093,7 +1700,12 @@
                 }
                 
                 // Кнопка "Играть"
-                const playBtn = { x: WIDTH/2 - 100, y: 430, w: 200, h: 60 };
+                const playW = isMobile ? 200 : 260;
+                const playH = isMobile ? 52 : 62;
+                const playX = (WIDTH - playW) / 2;
+                const playY = isMobile ? 225 : 330;
+                const playBtn = { x: playX, y: playY, w: playW, h: playH };
+                
                 if (x >= playBtn.x && x <= playBtn.x + playBtn.w &&
                     y >= playBtn.y && y <= playBtn.y + playBtn.h) {
                     this.gameState = "PLAYING";
@@ -1102,6 +1714,107 @@
                         this.levelTarget = 50 + (this.currentLevel - 1) * 50;
                     }
                     this.resetGame();
+                    this.showThemeMenu = false;
+                    this.showBorderMenu = false;
+                    this.showShapeMenu = false;
+                }
+                
+                // Кнопки настроек
+                if (x >= themeBtn.x && x <= themeBtn.x + themeBtn.w &&
+                    y >= themeBtn.y && y <= themeBtn.y + themeBtn.h) {
+                    this.showThemeMenu = !this.showThemeMenu;
+                    this.showBorderMenu = false;
+                    this.showShapeMenu = false;
+                    return;
+                }
+                
+                if (x >= borderBtn.x && x <= borderBtn.x + borderBtn.w &&
+                    y >= borderBtn.y && y <= borderBtn.y + borderBtn.h) {
+                    this.showBorderMenu = !this.showBorderMenu;
+                    this.showThemeMenu = false;
+                    this.showShapeMenu = false;
+                    return;
+                }
+                
+                if (x >= shapeBtn.x && x <= shapeBtn.x + shapeBtn.w &&
+                    y >= shapeBtn.y && y <= shapeBtn.y + shapeBtn.h) {
+                    this.showShapeMenu = !this.showShapeMenu;
+                    this.showThemeMenu = false;
+                    this.showBorderMenu = false;
+                    return;
+                }
+                
+                // Обработка кликов в меню выбора темы
+                if (this.showThemeMenu) {
+                    const menuX = themeBtn.x;
+                    const menuY = themeBtn.y + themeBtn.h + 3;
+                    const themeNames = Object.keys(COLOR_THEMES);
+                    const itemHeight = isMobile ? 32 : 40;
+                    const menuWidth = isMobile ? 160 : 190;
+                    
+                    for (let i = 0; i < themeNames.length; i++) {
+                        const itemY = menuY + 4 + i * itemHeight;
+                        if (x >= menuX && x <= menuX + menuWidth &&
+                            y >= itemY && y <= itemY + itemHeight - 2) {
+                            this.changeTheme(themeNames[i]);
+                            this.showThemeMenu = false;
+                            return;
+                        }
+                    }
+                }
+                
+                // Обработка кликов в меню выбора обводки
+                if (this.showBorderMenu) {
+                    const menuX = borderBtn.x;
+                    const menuY = borderBtn.y + borderBtn.h + 3;
+                    const itemHeight = isMobile ? 42 : 50;
+                    const menuWidth = isMobile ? 160 : 190;
+                    
+                    for (let i = 0; i < BORDER_COLORS.length; i++) {
+                        const itemY = menuY + 4 + i * itemHeight;
+                        if (x >= menuX && x <= menuX + menuWidth &&
+                            y >= itemY && y <= itemY + itemHeight - 2) {
+                            this.changeBorderColor(BORDER_COLORS[i].name);
+                            this.showBorderMenu = false;
+                            return;
+                        }
+                    }
+                }
+                
+                // Обработка кликов в меню выбора формы
+                if (this.showShapeMenu) {
+                    const menuX = shapeBtn.x;
+                    const menuY = shapeBtn.y + shapeBtn.h + 3;
+                    const itemHeight = isMobile ? 38 : 46;
+                    const menuWidth = isMobile ? 200 : 240;
+                    
+                    const modes = [
+                        { id: 'individual', label: 'Индивидуальные' },
+                        { id: 'uniform', label: 'Одинаковые' }
+                    ];
+                    
+                    for (let i = 0; i < modes.length; i++) {
+                        const itemY = menuY + 4 + i * itemHeight;
+                        if (x >= menuX && x <= menuX + menuWidth &&
+                            y >= itemY && y <= itemY + itemHeight - 2) {
+                            this.changeShapeMode(modes[i].id);
+                            this.showShapeMenu = false;
+                            return;
+                        }
+                    }
+                    
+                    if (this.currentShapeMode === 'uniform') {
+                        const startY = menuY + 4 + modes.length * itemHeight + 4;
+                        for (let i = 0; i < ALL_SHAPES.length; i++) {
+                            const itemY = startY + 4 + i * itemHeight;
+                            if (x >= menuX && x <= menuX + menuWidth &&
+                                y >= itemY && y <= itemY + itemHeight - 2) {
+                                this.changeUniformShape(ALL_SHAPES[i]);
+                                this.showShapeMenu = false;
+                                return;
+                            }
+                        }
+                    }
                 }
             }
             
@@ -1117,6 +1830,9 @@
                             this.gameState = "MENU";
                             this.selected = null;
                             this.gameOver = false;
+                            this.showThemeMenu = false;
+                            this.showBorderMenu = false;
+                            this.showShapeMenu = false;
                         } else if (btn.text === "ПОВТОРИТЬ") {
                             this.resetGame();
                             this.gameOver = false;
@@ -1140,7 +1856,6 @@
             handleMouseDown(pos) {
                 if (this.isAnimating || this.gameOver) return;
                 
-                // Проверка кнопки "Меню"
                 if (this._menuBtn) {
                     const btn = this._menuBtn;
                     if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
@@ -1149,11 +1864,13 @@
                         this.saveScores();
                         this.gameState = "MENU";
                         this.selected = null;
+                        this.showThemeMenu = false;
+                        this.showBorderMenu = false;
+                        this.showShapeMenu = false;
                         return;
                     }
                 }
                 
-                // Проверка кнопки "Сброс"
                 if (this._resetBtn) {
                     const btn = this._resetBtn;
                     if (pos.x >= btn.x && pos.x <= btn.x + btn.w &&
@@ -1313,7 +2030,6 @@
         
         // ==================== ПОЛИФИЛЛЫ ====================
         
-        // roundRect polyfill для старых браузеров
         if (!CanvasRenderingContext2D.prototype.roundRect) {
             CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, radii) {
                 const r = typeof radii === 'number' ? radii : (radii || 0);
